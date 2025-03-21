@@ -4,7 +4,7 @@ import logging
 import operator
 import random
 from functools import reduce
-from typing import Any, Dict, MutableMapping, Optional, Tuple, Union, cast
+from typing import Any, MutableMapping, Optional, Tuple, Union, cast
 
 import chex
 import flax
@@ -19,17 +19,12 @@ from flax.training.train_state import TrainState
 from gymnasium import spaces
 from gymnasium.core import ObservationWrapper
 from gymnasium.envs.registration import register
-from gymnasium.spaces import Box
-from gymnasium.wrappers import FlattenObservation
 from gymnax.environments import environment as environment_gymnax
 from gymnax.environments import spaces as spaces_gymnax
 from gymnax.wrappers.purerl import GymnaxWrapper
-from IPython.display import Image
-from minigrid.core.grid import Grid
-from minigrid.core.mission import MissionSpace
 from minigrid.core.world_object import Goal
 from minigrid.envs.distshift import DistShiftEnv
-from minigrid.wrappers import ActionBonus, OneHotPartialObsWrapper, PositionBonus, ViewSizeWrapper
+from minigrid.wrappers import OneHotPartialObsWrapper, ViewSizeWrapper
 from typing_extensions import TypeAliasType
 
 from sdt import entmax15JAX
@@ -195,7 +190,7 @@ class FlatCurrentWrapper(ObservationWrapper):
             dtype=np.float32,
         )
 
-        self.cachedStr: str = None
+        self.cachedStr: str = None  # type: ignore
 
     def observation(self, observation):
         image = observation["image"]
@@ -329,7 +324,7 @@ class FlatCurrentReducedWrapper(ObservationWrapper):
             dtype=np.float32,
         )
 
-        self.cachedStr: str = None
+        self.cachedStr: str = None  # type: ignore
 
     def observation(self, observation):
         image = observation["image"]
@@ -404,9 +399,6 @@ def build_env(env_id, n_env, view_size=3) -> "gym.vector.AsyncVectorEnv | gym.En
 
     if n_env > 1:
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        # NOTE # CRITICAL: This could be potentially wrong as the `env` variable is changed
-        # and thereby AsyncVectorEnv uses a reference to itself.
-        # consider: wrapped_env = env and lambda: wrapped_env instead
         env_to_return = gym.vector.AsyncVectorEnv([lambda: env for _ in range(n_env)])  # type: ignore[arg-type]
     else:
         env_to_return = env
@@ -696,7 +688,7 @@ def plot_decision_tree(
     image_path,
     observation_labels=None,
     filename_appendix="",
-    env: Optional[EnvType]=None,
+    env: Optional[EnvType] = None,
     env_params=None,
     prune=True,
     continuous=False,
