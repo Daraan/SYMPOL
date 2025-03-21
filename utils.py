@@ -8,12 +8,13 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import chex
 import flax
+import flax.struct
 import graphviz
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np
-from flax import struct
+from flax.core import freeze, unfreeze
 from flax.training.train_state import TrainState
 from gymnasium import spaces
 from gymnasium.core import ObservationWrapper
@@ -428,11 +429,6 @@ class EpisodeStatistics:
 class ObservationActionBuffer:
     obs: jnp.ndarray
     actions: jnp.ndarray
-
-
-import jax
-import jax.numpy as jnp
-from flax.core import freeze, unfreeze
 
 
 def convert_to_discrete_tree(params, action_type, temperature=1.0):
