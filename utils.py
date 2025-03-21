@@ -184,7 +184,7 @@ class FlatCurrentWrapper(ObservationWrapper):
             low=0,
             high=255,
             shape=(imgSize,),
-            dtype="float32",
+            dtype=np.float32,
         )
 
         self.cachedStr: str = None
@@ -318,7 +318,7 @@ class FlatCurrentReducedWrapper(ObservationWrapper):
             low=0,
             high=255,
             shape=(imgSize,),
-            dtype="float32",
+            dtype=np.float32,
         )
 
         self.cachedStr: str = None
