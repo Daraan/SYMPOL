@@ -2,6 +2,7 @@ import argparse
 import sys
 import itertools
 
+
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -11,17 +12,17 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         if args is None:
             args = sys.argv[1:]
         namespace, remaining_args = super().parse_known_args(args, namespace)
-        self.explicit_args = {arg[2:] for arg in args if arg.startswith('--')}
+        self.explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
         return namespace, remaining_args
 
     def parse_args(self, args=None, namespace=None):
         namespace, remaining_args = self.parse_known_args(args, namespace)
         if remaining_args:
-            msg = 'unrecognized arguments: %s'
-            self.error(msg % ' '.join(remaining_args))
+            msg = "unrecognized arguments: %s"
+            self.error(msg % " ".join(remaining_args))
         return namespace
 
-        
+
 def get_args():
     parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
@@ -41,34 +42,31 @@ def get_args():
         "--overwrite_explicit",
         action="store_true",
     )
-    
+
     parser.add_argument(
         "--adamW",
         action="store_true",
     )
 
     parser.add_argument(
-        "--no-adamW",
-        action="store_false",
-        dest="adamW",
-        help="Do not use AdamW optimizer (explicitly sets to False)"
+        "--no-adamW", action="store_false", dest="adamW", help="Do not use AdamW optimizer (explicitly sets to False)"
     )
-    
+
     parser.add_argument(
         "--normEnv",
         action="store_true",
     )
-    
+
     parser.add_argument(
         "--use_batch_norm",
         action="store_true",
     )
-    
+
     parser.add_argument(
         "--SWA",
         action="store_true",
     )
-    
+
     parser.add_argument(
         "--dynamic_buffer",
         action="store_true",
@@ -80,7 +78,7 @@ def get_args():
         action="store_true",
         help="Use static batch size",
     )
-    
+
     parser.add_argument(
         "--path",
         type=str,
@@ -92,23 +90,21 @@ def get_args():
         action="store_true",
         help="If true, render environments each time there is an evaluation",
     )
-    
+
     parser.add_argument(
         "--no-render_env",
-        dest='render_env',
-        action='store_false',
+        dest="render_env",
+        action="store_false",
         help="Flag to disable rendering of the environment",
     )
-    
+
     parser.add_argument(
         "--no-reduce_lr",
-        dest='reduce_lr',
-        action='store_false',
+        dest="reduce_lr",
+        action="store_false",
         help="Flag to not use reduce_lr",
     )
 
-    
-    
     parser.add_argument(
         "--gpu_number",
         type=int,
@@ -134,7 +130,7 @@ def get_args():
         type=int,
         default=3,
         help="MiniGrid view size",
-    )    
+    )
     # SYMPOL specific parameters
     parser.add_argument("--depth", type=int, default=7, help="Depth for each single estimator / tree")
     parser.add_argument("--n_estimators", type=int, default=1, help="Number of estimators / trees for the ensemble")
@@ -150,7 +146,7 @@ def get_args():
         type=float,
         default=1e-3,
         help="Learning rate for all weights in SYMPOL (estimator weights, split values, split indices and leaf classes)",
-    )    
+    )
     parser.add_argument(
         "--learning_rate_actor_weights",
         type=float,
@@ -181,15 +177,14 @@ def get_args():
         default=1e-3,
         help="Learning rate for all weights in SYMPOL (estimator weights, split values, split indices and leaf classes)",
     )
-    
 
     parser.add_argument(
         "--temperature",
         type=float,
         default=1.0,
         help="SDT entmax temperature",
-    )    
-    
+    )
+
     parser.add_argument(
         "--num_layers",
         type=int,
@@ -203,7 +198,7 @@ def get_args():
         default=256,
         help="Number of neurons per MLP layer",
     )
-    
+
     # PPO specific parameters
     parser.add_argument(
         "--actor",
@@ -238,7 +233,7 @@ def get_args():
     parser.add_argument("--clip_vloss", action="store_true", help="Clip value function loss")
 
     parser.add_argument("--clip_coef", type=float, default=0.1, help="Clip coefficient PPO")
-    
+
     parser.add_argument("--vf_coef", type=float, default=0.5, help="Value function loss coefficient")
     parser.add_argument(
         "--accumulate_gradients_every",
@@ -247,7 +242,7 @@ def get_args():
         help="Number of accumulation steps for the gradient update. The accumulated gradients will be averaged before backpropagation",
     )
     parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Gradient clipping threshold")
-    #parser.add_argument("--target_kl", type=float, default=None, help="Target KL divergence threshold")
+    # parser.add_argument("--target_kl", type=float, default=None, help="Target KL divergence threshold")
     parser.add_argument("--target_kl", type=float, default=None, help="Target KL divergence threshold")
     parser.add_argument("--norm_adv", action="store_true", help="If ture, Normalize the advantages")
 
@@ -266,26 +261,24 @@ def get_args():
         default=1_000_000,
         help="Number of total environment steps for training. If more than one environment is used, e.g. 5 environments, we have 5 total steps per env.step() call",
     )
-    #parser.add_argument(
+    # parser.add_argument(
     #    "--eval_freq", type=int, default=50, help="Frequency of evaluation (in iterations, see argument `n_iteration`)"
-    #)
-    parser.add_argument(
-        "--eval_freq", type=int, default=50_000, help="Frequency of evaluation (in total timesteps)"
-    )    
-    #parser.add_argument(
+    # )
+    parser.add_argument("--eval_freq", type=int, default=50_000, help="Frequency of evaluation (in total timesteps)")
+    # parser.add_argument(
     #    "--n_minibatches",
     #    type=int,
     #    default=8,
     #    help="One minibatch is the input that is used for backpropagation / optimization.",
-    #)
-    
+    # )
+
     parser.add_argument(
         "--minibatch_size",
         type=int,
         default=128,
         help="Minibatch size used for backpropagation / optimization.",
     )
-    
+
     parser.add_argument(
         "--n_eval_episodes",
         type=int,
@@ -295,40 +288,40 @@ def get_args():
     parser.add_argument("--n_envs", type=int, default=8, help="Number of environments to use for collecting data")
 
     parser.add_argument("--random_trials", type=int, default=5, help="Number of random trials for evaluation")
-    
-    args = parser.parse_args()  
+
+    args = parser.parse_args()
     explicit_args_corrected = []
     for some_arg in parser.explicit_args:
-        if 'no-' in some_arg:
-            explicit_args_corrected.append(''.join(some_arg.split('no-')))
+        if "no-" in some_arg:
+            explicit_args_corrected.append("".join(some_arg.split("no-")))
         else:
             explicit_args_corrected.append(some_arg)
     explicit_arg_values = {arg: getattr(args, arg) for arg in explicit_args_corrected}
     args.__dict__.update(explicit_arg_values)
     if args.use_best_config:
-        import configs   
+        import configs
 
         for name, value in vars(configs).items():
-            if 'minigrid' in name and name.split('_')[1] in args.env_id.lower():
-                if args.actor == 'stateActionDT':
-                    best_cfg = value['mlp']
-                elif args.actor == 'd-sdt':
-                    best_cfg = value['sdt']
+            if "minigrid" in name and name.split("_")[1] in args.env_id.lower():
+                if args.actor == "stateActionDT":
+                    best_cfg = value["mlp"]
+                elif args.actor == "d-sdt":
+                    best_cfg = value["sdt"]
                 else:
                     best_cfg = value[args.actor]
                 args.__dict__.update(best_cfg)
                 break
-                
-            elif name == '-'.join(args.env_id.lower().split('-')[:-1]):
-                if args.actor == 'stateActionDT':
-                    best_cfg = value['mlp']
-                elif args.actor == 'd-sdt':
-                    best_cfg = value['sdt']
+
+            elif name == "-".join(args.env_id.lower().split("-")[:-1]):
+                if args.actor == "stateActionDT":
+                    best_cfg = value["mlp"]
+                elif args.actor == "d-sdt":
+                    best_cfg = value["sdt"]
                 else:
                     best_cfg = value[args.actor]
                 args.__dict__.update(best_cfg)
                 break
     if args.overwrite_explicit:
-        args.__dict__.update(explicit_arg_values) 
-          
+        args.__dict__.update(explicit_arg_values)
+
     return args

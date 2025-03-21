@@ -1,7 +1,8 @@
 from functools import partial
 import jax
 import jax.numpy as jnp
-#from torch.autograd import Function
+
+# from torch.autograd import Function
 import distrax
 
 from flax import linen as nn
@@ -21,8 +22,8 @@ class SYMPOL_RL:
     # **kwargs is only used here to be compatible with the flax init procedure, i.e.
     # params = model.init(key, sample_input)
     def init(self, random_key, *args):
-        estimator_weights_key, split_values_key, split_index_array_key, leaf_classes_array_key, logstd_key = jax.random.split(
-            random_key, 5
+        estimator_weights_key, split_values_key, split_index_array_key, leaf_classes_array_key, logstd_key = (
+            jax.random.split(random_key, 5)
         )
 
         internal_node_num = 2**self.depth - 1
@@ -38,7 +39,7 @@ class SYMPOL_RL:
             selected_variables = int(self.obs_dim * self.subset_fraction)
             selected_variables = min(selected_variables, 50)
             selected_variables = max(selected_variables, 10)
-            selected_variables = min(selected_variables, self.obs_dim)  
+            selected_variables = min(selected_variables, self.obs_dim)
             if not selected_variables * self.n_estimators > 3 * self.obs_dim:
                 selected_variables = self.obs_dim
         else:
@@ -64,10 +65,13 @@ class SYMPOL_RL:
         )
 
         log_std = mu + std * jax.random.normal(
-            key=logstd_key, shape=[self.action_dim,], dtype=jnp.float32
-        )        
+            key=logstd_key,
+            shape=[
+                self.action_dim,
+            ],
+            dtype=jnp.float32,
+        )
 
-        
         params = {
             "estimator_weights": estimator_weights,
             "split_values": split_values,
@@ -84,16 +88,15 @@ class SYMPOL_RL:
             selected_variables = int(self.obs_dim * self.subset_fraction)
             selected_variables = min(selected_variables, 50)
             selected_variables = max(selected_variables, 10)
-            selected_variables = min(selected_variables, self.obs_dim)  
+            selected_variables = min(selected_variables, self.obs_dim)
             if not selected_variables * self.n_estimators > 3 * self.obs_dim:
                 selected_variables = self.obs_dim
         else:
             selected_variables = self.obs_dim
 
-        
         features_by_estimator = jnp.stack(
             [
-                jax.random.choice(random_key+i, self.obs_dim, shape=(selected_variables,), replace=False, p=None)
+                jax.random.choice(random_key + i, self.obs_dim, shape=(selected_variables,), replace=False, p=None)
                 for i in range(self.n_estimators)
             ]
         )
@@ -103,16 +106,17 @@ class SYMPOL_RL:
         for leaf_index in range(leaf_node_num):
             for current_depth in range(1, self.depth + 1):
                 path_identifier = jnp.floor(leaf_index / (2 ** (self.depth - current_depth))) % 2
-                internal_node_index = (2 ** (current_depth - 1) + jnp.floor(leaf_index / (2 ** (self.depth - (current_depth - 1)))) - 1).astype(jnp.int32)
+                internal_node_index = (
+                    2 ** (current_depth - 1) + jnp.floor(leaf_index / (2 ** (self.depth - (current_depth - 1)))) - 1
+                ).astype(jnp.int32)
                 path_identifier_list.append(path_identifier)
                 internal_node_index_list.append(internal_node_index)
-        
+
         path_identifier_list = jnp.reshape(jnp.array(path_identifier_list, dtype=jnp.float32), (-1, self.depth))
         internal_node_index_list = jnp.reshape(jnp.array(internal_node_index_list, dtype=jnp.int32), (-1, self.depth))
 
-
-        #jax.debug.print("path_identifier_list: {}", path_identifier_list)
-        #jax.debug.print("internal_node_index_list: {}", internal_node_index_list)
+        # jax.debug.print("path_identifier_list: {}", path_identifier_list)
+        # jax.debug.print("internal_node_index_list: {}", internal_node_index_list)
 
         indices = {
             "features_by_estimator": features_by_estimator,
@@ -152,12 +156,12 @@ class SYMPOL_RL:
             jnp.argmax(split_index_array, axis=-1), num_classes=split_index_array.shape[-1]
         )
         split_index_array = split_index_array - jax.lax.stop_gradient(adjust_constant)
-        #jax.debug.print("split_index_array: {}", split_index_array)
+        # jax.debug.print("split_index_array: {}", split_index_array)
         # as split_index_array_selected is one-hot-encoded, taking the sum over the last axis after multiplication results in selecting the desired value at the index
         s1_sum = jnp.einsum("ein,ein->ei", split_values, split_index_array)
         s2_sum = jnp.einsum("ben,ein->bei", X_estimator, split_index_array)
-        #s2_sum = jnp.einsum("bn,ein->bei", inputs, split_index_array)
-        
+        # s2_sum = jnp.einsum("bn,ein->bei", inputs, split_index_array)
+
         # calculate the split (output shape: (b, e, i))
         node_result = (jax.nn.soft_sign(s1_sum - s2_sum) + 1) / 2
         adjust_constant = node_result - jnp.round(node_result)
@@ -167,19 +171,19 @@ class SYMPOL_RL:
 
         # the resulting shape of the tensors is (b, e, l, d):
         node_result_extended = node_result_corrected[:, :, internal_node_index_list]
-        #jax.debug.print("node_result_extended {}: {}", node_result_extended.shape, node_result_extended)
+        # jax.debug.print("node_result_extended {}: {}", node_result_extended.shape, node_result_extended)
         # reduce the path via multiplication to get result for each path (in each estimator) based on the results of the corresponding internal nodes (output shape: (b, e, l))
         p = jnp.prod(
             ((1 - path_identifier_list) * node_result_extended + path_identifier_list * (1 - node_result_extended)),
             axis=3,
         )
-        #jax.debug.print("p {}: {}", p.shape, p)
+        # jax.debug.print("p {}: {}", p.shape, p)
         # calculate instance-wise leaf weights for each estimator by selecting the weight of the selected path for each estimator
         estimator_weights_leaf = jnp.einsum("el,bel->be", estimator_weights, p)
 
         # use softmax over weights for each instance
         estimator_weights_leaf_softmax = jax.nn.softmax(estimator_weights_leaf)
-        #jax.debug.print("estimator_weights_leaf_softmax {}: {}", estimator_weights_leaf_softmax.shape, estimator_weights_leaf_softmax)
+        # jax.debug.print("estimator_weights_leaf_softmax {}: {}", estimator_weights_leaf_softmax.shape, estimator_weights_leaf_softmax)
         # get raw prediction for each estimator
         if self.action_type == "continuous":
             layer_output = jnp.einsum("elc,bel->bec", leaf_classes_array, p)
@@ -290,7 +294,6 @@ def entmax_threshold_and_supportJAX(inputs, axis=-1):
 
 
 def entmax15JAX(inputs, axis=-1):
-
     # Implementation taken from: https://github.com/deep-spin/entmax/tree/master/entmax
 
     """
