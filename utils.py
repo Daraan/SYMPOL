@@ -189,9 +189,9 @@ class FlatCurrentWrapper(ObservationWrapper):
 
         self.cachedStr: str = None
 
-    def observation(self, obs):
-        image = obs["image"]
-        mission = obs["mission"]
+    def observation(self, observation):
+        image = observation["image"]
+        mission = observation["mission"]
 
         obs = image.flatten().astype(np.float32)
         obs = obs * 2 - 1  # convert to range -1,1 instead of 0,1
@@ -323,9 +323,9 @@ class FlatCurrentReducedWrapper(ObservationWrapper):
 
         self.cachedStr: str = None
 
-    def observation(self, obs):
-        image = obs["image"]
-        mission = obs["mission"]
+    def observation(self, observation):
+        image = observation["image"]
+        mission = observation["mission"]
         # print('image.shape', image.shape)
         # print('image.flatten().shape', image.flatten().shape)
         obs = image[:, :, self.select_indices].flatten().astype(np.float32)
@@ -340,17 +340,17 @@ class NormalizeWrapperLunarLander(gym.ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
 
-    def observation(self, obs):
-        obs[0] = (obs[0] - 0) / 1.5
-        obs[1] = (obs[1] - 0) / 1.5
-        obs[2] = (obs[2] - 0) / 5.0
-        obs[3] = (obs[3] - 0) / 5.0
-        obs[4] = (obs[4] - 0) / 3.14
-        obs[5] = (obs[5] - 0) / 5.0
-        obs[6] = (obs[6] - 1) / 0.5
-        obs[7] = (obs[7] - 1) / 0.5
+    def observation(self, observation):
+        observation[0] = (observation[0] - 0) / 1.5
+        observation[1] = (observation[1] - 0) / 1.5
+        observation[2] = (observation[2] - 0) / 5.0
+        observation[3] = (observation[3] - 0) / 5.0
+        observation[4] = (observation[4] - 0) / 3.14
+        observation[5] = (observation[5] - 0) / 5.0
+        observation[6] = (observation[6] - 1) / 0.5
+        observation[7] = (observation[7] - 1) / 0.5
 
-        return obs
+        return observation
 
 
 class AutoResetWrapper(gym.Wrapper):
