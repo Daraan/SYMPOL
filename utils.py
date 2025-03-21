@@ -30,7 +30,7 @@ from flax import struct
 import jax
 import jax.numpy as jnp
 import numpy as np
-from gymnax.environments import environment
+from gymnax.environments import environment as environment_gymnax
 from gymnax.environments import spaces as spaces_gymnax
 
 import copy
@@ -85,8 +85,8 @@ class NormalizeObservationWrapper(GymnaxWrapper):
 
     @functools.partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, key: chex.PRNGKey, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[chex.Array, environment.EnvState]:
+        self, key: chex.PRNGKey, params: Optional[environment_gymnax.EnvParams] = None
+    ) -> Tuple[chex.Array, environment_gymnax.EnvState]:
         obs, state = self._env.reset(key, params)
         obs = self.normalize_obs(obs)  # jnp.reshape(obs, (-1,))
         return obs, state
@@ -95,10 +95,10 @@ class NormalizeObservationWrapper(GymnaxWrapper):
     def step(
         self,
         key: chex.PRNGKey,
-        state: environment.EnvState,
+        state: environment_gymnax.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[chex.Array, environment.EnvState, float, bool, Any]:  # dict]:
+        params: Optional[environment_gymnax.EnvParams] = None,
+    ) -> Tuple[chex.Array, environment_gymnax.EnvState, float, bool, Any]:  # dict]:
         obs, state, reward, done, info = self._env.step(key, state, action, params)
         obs = self.normalize_obs(obs)  # jnp.reshape(obs, (-1,))
         return obs, state, reward, done, info
