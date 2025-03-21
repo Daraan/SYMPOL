@@ -1,39 +1,35 @@
-import gymnasium as gym
-import jax.numpy as jnp
+import copy
+import functools
+import logging
+import operator
+import random
+from functools import reduce
+from typing import Any, Dict, Optional, Tuple, Union
+
+import chex
 import flax
+import graphviz
+import gymnasium as gym
+import jax
+import jax.numpy as jnp
+import numpy as np
+from flax import struct
 from flax.training.train_state import TrainState
-from sdt import entmax15JAX
+from gymnasium import spaces
+from gymnasium.core import ObservationWrapper
+from gymnasium.envs.registration import register
 from gymnasium.spaces import Box
 from gymnasium.wrappers import FlattenObservation
-from minigrid.wrappers import OneHotPartialObsWrapper, ViewSizeWrapper, ObservationWrapper, ActionBonus, PositionBonus
-
-from functools import reduce
-import operator
-from gymnasium import spaces
-
-import random
+from gymnax.environments import environment as environment_gymnax
+from gymnax.environments import spaces as spaces_gymnax
+from gymnax.wrappers.purerl import GymnaxWrapper
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
 from minigrid.core.world_object import Goal
 from minigrid.envs.distshift import DistShiftEnv
-from gymnasium.envs.registration import register
-import graphviz
-import numpy as np
-from gymnax.wrappers.purerl import GymnaxWrapper
+from minigrid.wrappers import ActionBonus, OneHotPartialObsWrapper, PositionBonus, ViewSizeWrapper
 
-import functools
-from typing import Any, Dict, Optional, Tuple, Union
-
-
-import chex
-from flax import struct
-import jax
-import jax.numpy as jnp
-import numpy as np
-from gymnax.environments import environment as environment_gymnax
-from gymnax.environments import spaces as spaces_gymnax
-
-import copy
+from sdt import entmax15JAX
 
 OBSERVATION_LABELS = {
     "LunarLander-v2": [
