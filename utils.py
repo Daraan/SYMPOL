@@ -4,7 +4,7 @@ import logging
 import operator
 import random
 from functools import reduce
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, MutableMapping, Optional, Tuple, Union, cast
 
 import chex
 import flax
@@ -29,6 +29,7 @@ from minigrid.core.mission import MissionSpace
 from minigrid.core.world_object import Goal
 from minigrid.envs.distshift import DistShiftEnv
 from minigrid.wrappers import ActionBonus, OneHotPartialObsWrapper, PositionBonus, ViewSizeWrapper
+from typing_extensions import TypeAliasType
 
 from sdt import entmax15JAX
 
@@ -44,6 +45,8 @@ OBSERVATION_LABELS = {
         "leg_2_ground_contact",
     ]
 }
+
+EnvType = TypeAliasType("EnvType", gym.Env | environment_gymnax.Environment)
 
 _logger = logging.getLogger(__name__)
 
@@ -181,7 +184,7 @@ class FlatCurrentWrapper(ObservationWrapper):
     def __init__(self, env, maxStrLen=96):
         super().__init__(env)
 
-        imgSpace = self.env.observation_space.spaces["image"]
+        imgSpace = self.env.observation_space.spaces["image"]  # type: ignore # add better generics
         imgSize = reduce(operator.mul, imgSpace.shape, 1)
 
         self.observation_space = spaces.Box(
@@ -383,7 +386,8 @@ class AutoResetWrapper(gym.Wrapper):
         return self.observation, self.info
 
 
-def build_env(env_id, n_env, view_size=3):
+def build_env(env_id, n_env, view_size=3) -> "gym.vector.AsyncVectorEnv | gym.Env | ObservationWrapper":
+    env = gym.vector.AsyncVectorEnv | gym.Env | ObservationWrapper
     if n_env > 1:
         env = gym.make(id=env_id)  # , render_mode="rgb_array")
 
@@ -492,7 +496,9 @@ def convert_to_discrete_tree(params, action_type, temperature=1.0):
     return freeze(new_params)
 
 
-def prune_and_merge_tree(node, split_ranges, constraints=None, continuous=False):
+def prune_and_merge_tree(
+    node: dict, split_ranges: dict[Any, tuple[float, float]], constraints: Optional[dict] = None, continuous=False
+):
     """
     Prune a decision tree based on predefined ranges for each split index, merge leaf nodes with the same distribution,
     and remove redundant paths that cannot be taken because previous splits already predetermine the path.
@@ -694,7 +700,7 @@ def plot_decision_tree(
     image_path,
     observation_labels=None,
     filename_appendix="",
-    env=None,
+    env: Optional[EnvType]=None,
     env_params=None,
     prune=True,
     continuous=False,
@@ -703,18 +709,18 @@ def plot_decision_tree(
         split_values, split_indices, leaf_values, features_by_estimator
     )
     if prune:
+        assert env
         ranges_dict = None
         if env_params is not None:
-            import gymnax
-
+            env = cast("environment_gymnax.Environment", env)
             env_name = env.name
             observation_space = env.observation_space(env_params)
-            if isinstance(observation_space, gymnax.environments.spaces.Box):
+            if isinstance(observation_space, spaces_gymnax.Box):
                 ranges_dict = {}
                 for i, range_tuple in enumerate(np.vstack([observation_space.low, observation_space.high]).T):
                     ranges_dict[i] = list(np.asarray(range_tuple))
                 print(ranges_dict)
-            elif isinstance(observation_space, gymnax.environments.spaces.Discrete):
+            elif isinstance(observation_space, spaces_gymnax.Discrete):
                 ranges_dict = {}
                 for i in range(observation_space.n):
                     ranges_dict[i] = [0, 1]
@@ -722,11 +728,13 @@ def plot_decision_tree(
             else:
                 print("Observation Space type is not handled in this snippet.")
         else:
+            env = cast("gym.Env", env)
             observation_space = env.observation_space
-            env_name = env.unwrapped.spec.id
+            env_name = env.unwrapped.spec.id  # type: ignore[attr-defined]
             if "MiniGrid" in env_name:
+                observation_space = cast("gym.spaces.Box", observation_space)  # best guess
                 ranges_dict = {}
-                for i, range_tuple in enumerate(np.vstack([observation_space.low, observation_space.high]).T):
+                for i, _range_tuple in enumerate(np.vstack([observation_space.low, observation_space.high]).T):
                     ranges_dict[i] = [-1, 1]
                 print(ranges_dict)
             else:
@@ -790,12 +798,14 @@ def convert_to_child_representation_soft(split_values, split_indices, leaf_value
     return build_tree(0)
 
 
-def plot_tree_from_representation_soft(tree, image_path, filename_appendix="", observation_labels=None):
+def plot_tree_from_representation_soft(
+    tree: MutableMapping[str, Any], image_path, filename_appendix="", observation_labels=None
+):
     def add_nodes_edges(tree, dot=None):
         if dot is None:
             dot = graphviz.Digraph()
 
-        def traverse(node, parent=None):
+        def traverse(node: MutableMapping[str, Any], parent=None):
             if node["type"] == "leaf":
                 label = f"Action: {node['action']}"
                 node_id = str(id(node))
