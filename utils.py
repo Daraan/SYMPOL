@@ -24,6 +24,7 @@ from gymnasium.wrappers import FlattenObservation
 from gymnax.environments import environment as environment_gymnax
 from gymnax.environments import spaces as spaces_gymnax
 from gymnax.wrappers.purerl import GymnaxWrapper
+from IPython.display import Image
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
 from minigrid.core.world_object import Goal
@@ -603,11 +604,6 @@ def prune_and_merge_tree(
     return node
 
 
-import graphviz
-import numpy as np
-from IPython.display import Image
-
-
 def convert_to_child_representation(split_values, split_indices, leaf_values, features_by_estimator):
     num_internal_nodes = split_values.shape[0]
     num_leaf_nodes = leaf_values.shape[0]
@@ -764,11 +760,6 @@ def plot_decision_tree(
     )
 
     return plot_path, node_count["internal"] + node_count["leaf"]
-
-
-import graphviz
-import numpy as np
-from IPython.display import Image
 
 
 def convert_to_child_representation_soft(split_values, split_indices, leaf_values, temperature):
