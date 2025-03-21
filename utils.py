@@ -406,28 +406,28 @@ class ActorTrainState(TrainState):
 
 @flax.struct.dataclass
 class Storage:
-    obs: jnp.array
-    actions: jnp.array
-    logprobs: jnp.array
-    dones: jnp.array
-    values: jnp.array
-    advantages: jnp.array
-    returns: jnp.array
-    rewards: jnp.array
+    obs: jnp.ndarray
+    actions: jnp.ndarray
+    logprobs: jnp.ndarray
+    dones: jnp.ndarray
+    values: jnp.ndarray
+    advantages: jnp.ndarray
+    returns: jnp.ndarray
+    rewards: jnp.ndarray
 
 
 @flax.struct.dataclass
 class EpisodeStatistics:
-    episode_returns: jnp.array
-    episode_lengths: jnp.array
-    returned_episode_returns: jnp.array
-    returned_episode_lengths: jnp.array
+    episode_returns: jnp.ndarray
+    episode_lengths: jnp.ndarray
+    returned_episode_returns: jnp.ndarray
+    returned_episode_lengths: jnp.ndarray
 
 
 @flax.struct.dataclass
 class ObservationActionBuffer:
-    obs: jnp.array
-    actions: jnp.array
+    obs: jnp.ndarray
+    actions: jnp.ndarray
 
 
 import jax
