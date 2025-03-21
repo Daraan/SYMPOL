@@ -45,6 +45,8 @@ OBSERVATION_LABELS = {
     ]
 }
 
+_logger = logging.getLogger(__name__)
+
 
 class NormalizeObservationWrapper(GymnaxWrapper):
     """Normalize the observations of the environment."""
@@ -701,6 +703,7 @@ def plot_decision_tree(
         split_values, split_indices, leaf_values, features_by_estimator
     )
     if prune:
+        ranges_dict = None
         if env_params is not None:
             import gymnax
 
@@ -739,6 +742,9 @@ def plot_decision_tree(
                     print(ranges_dict)
                 else:
                     print("Observation Space type is not handled in this snippet.")
+        if ranges_dict is None:
+            _logger.error("Unsupported setting for env and its observation space. This might cause an error.")
+            ranges_dict = {}  # try to continue instead of raising an error
         tree_representation = prune_and_merge_tree(tree_representation, ranges_dict, continuous=continuous)
     node_count = count_nodes(tree_representation)
     plot_path = plot_tree_from_representation(

@@ -192,6 +192,8 @@ class SYMPOL_RL:
         elif self.action_type == "discrete":
             layer_output = jnp.einsum("elc,bel->bec", leaf_classes_array, p)
             result = jnp.einsum("be,bec->bc", estimator_weights_leaf_softmax, layer_output)
+        else:
+            raise ValueError(f"Invalid action type {self.action_type}")
 
         return result
 
