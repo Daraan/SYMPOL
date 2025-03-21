@@ -400,8 +400,10 @@ def build_env(env_id, n_env, view_size=3):
         # NOTE # CRITICAL: This could be potentially wrong as the `env` variable is changed
         # and thereby AsyncVectorEnv uses a reference to itself.
         # consider: wrapped_env = env and lambda: wrapped_env instead
-        env = gym.vector.AsyncVectorEnv([lambda: env for _ in range(n_env)])
-    return env
+        env_to_return = gym.vector.AsyncVectorEnv([lambda: env for _ in range(n_env)])  # type: ignore[arg-type]
+    else:
+        env_to_return = env
+    return env_to_return
 
 
 class ActorTrainState(TrainState):
