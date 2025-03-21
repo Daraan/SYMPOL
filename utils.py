@@ -49,8 +49,9 @@ OBSERVATION_LABELS = {
 class NormalizeObservationWrapper(GymnaxWrapper):
     """Normalize the observations of the environment."""
 
-    def __init__(self, env, params):
+    def __init__(self, env: environment_gymnax.Environment, params):
         super().__init__(env)
+        self._env: environment_gymnax.Environment
 
         self.original_low_no_clip = self._env.observation_space(params).low
         self.original_high_no_clip = self._env.observation_space(params).high
@@ -178,7 +179,7 @@ class FlatCurrentWrapper(ObservationWrapper):
     def __init__(self, env, maxStrLen=96):
         super().__init__(env)
 
-        imgSpace = env.observation_space.spaces["image"]
+        imgSpace = self.env.observation_space.spaces["image"]
         imgSize = reduce(operator.mul, imgSpace.shape, 1)
 
         self.observation_space = spaces.Box(
