@@ -1,63 +1,55 @@
 # Code mostly taken from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_atari_envpool_xla_jax.py
+import datetime
+import functools
+import multiprocessing
+import os
+import pickle
+import random
+import time
+from functools import partial
+from typing import Any
+
+import distrax
+import flax
+import graphviz
 import gymnasium as gym
-import numpy as np
+import gymnax
 import jax
 import jax.numpy as jnp
-import flax
-from distrax import Normal, MultivariateNormalDiag
-from flax import linen as nn
-from functools import partial
-
-from flax.training.train_state import TrainState
+import numpy as np
 import optax
 import optuna
-import functools
-import os
-import random
-from typing import Any
+import wandb
+from distrax import MultivariateNormalDiag, Normal
+from flax import linen as nn
+from flax.training.train_state import TrainState
+from gymnasium.wrappers import FlattenObservation
+from gymnax.wrappers import gym as wrappers
+from gymnax.wrappers.purerl import FlattenObservationWrapper, GymnaxWrapper
+from jax import lax
+from matplotlib import pyplot as plt
 
 # from torch.utils.tensorboard import SummaryWriter
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import ImageSequenceClip
-from matplotlib import pyplot as plt
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
 
-import datetime
-
+import configs
+from args import get_args
+from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
+from sdt import Actor_SDT, Critic_SDT
+from sympol import SYMPOL_RL
 from utils import (
-    build_env,
+    OBSERVATION_LABELS,
     ActorTrainState,
     EpisodeStatistics,
-    Storage,
+    NormalizeObservationWrapper,
     ObservationActionBuffer,
+    Storage,
+    build_env,
     convert_to_discrete_tree,
     plot_decision_tree,
     plot_decision_tree_soft,
-    NormalizeObservationWrapper,
-    OBSERVATION_LABELS,
 )
-
-from args import get_args
-import configs
-from sympol import SYMPOL_RL
-from mlp import Critic_MLP, Actor_MLP, Actor_MLP_Continuous
-from sdt import Critic_SDT, Actor_SDT
-
-
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
-import distrax
-
-import graphviz
-import wandb
-import pickle
-import gymnax
-import time
-
-import jax
-import jax.numpy as jnp
-from jax import lax
-from gymnax.wrappers import gym as wrappers
-from gymnax.wrappers.purerl import FlattenObservationWrapper, GymnaxWrapper
-from gymnasium.wrappers import FlattenObservation
 
 # os.environ['MUJOCO_GL'] = 'egl'
 
@@ -1851,9 +1843,6 @@ def train_agent(args, trial=None, queue=None):
         queue.put(np.mean(trial_scores))  # Put the result in the queue
 
 
-import multiprocessing
-
-
 def multiprocessing_objective_fn(args, trial):
     queue = multiprocessing.Queue()
     p = multiprocessing.Process(target=train_agent, args=(args, trial, queue))
@@ -1864,9 +1853,10 @@ def multiprocessing_objective_fn(args, trial):
 
 
 if __name__ == "__main__":
-    from optuna.storages import RDBStorage
-    from sqlalchemy import create_engine
     import socket
+
+    from optuna.storages import RDBStorage  # noqa: F401
+    from sqlalchemy import create_engine  # noqa: F401
 
     args = get_args()
     print(args)
