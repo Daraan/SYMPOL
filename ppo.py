@@ -1,4 +1,7 @@
 # Code mostly taken from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_atari_envpool_xla_jax.py
+# pyright: analyzeUnannotatedFunctions=false
+from __future__ import annotations
+
 import datetime
 import functools
 import multiprocessing
@@ -6,7 +9,7 @@ import os
 import pickle
 import time
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional, Sequence, cast
 
 import distrax
 import flax
@@ -17,7 +20,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import optuna
-import wandb
 from distrax import MultivariateNormalDiag, Normal
 from flax import linen as nn
 from flax.training.train_state import TrainState
@@ -30,6 +32,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
 
 import configs
+import wandb
 from args import get_args
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
 from sdt import Actor_SDT, Critic_SDT
@@ -46,6 +49,11 @@ from utils import (
     plot_decision_tree_soft,
 )
 
+if TYPE_CHECKING:
+    import chex
+    from sklearn.tree import BaseDecisionTree
+    from numpy.typing import NDArray
+
 # os.environ['MUJOCO_GL'] = 'egl'
 
 
@@ -59,7 +67,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "0"
 # os.environ["TF_CUDNN DETERMINISTIC"] = "1"
 
 
-def train_agent(args, trial=None, queue=None):
+def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[multiprocessing.Queue] = None):
     start_time = time.time()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_number)
@@ -85,7 +93,7 @@ def train_agent(args, trial=None, queue=None):
 
         args.__dict__.update(suggested_params)
 
-        n_steps = args.n_steps
+        n_steps: int = args.n_steps
 
     elif not args.use_best_config:
         if False:
@@ -120,7 +128,7 @@ def train_agent(args, trial=None, queue=None):
     # these parameters are defined dynamically
     batch_size = int(args.n_envs * n_steps)
     # minibatch_size = int(batch_size // args.n_minibatches)
-    minibatch_size = args.minibatch_size
+    minibatch_size: int = args.minibatch_size
     while batch_size // minibatch_size < 2:
         minibatch_size = minibatch_size // 2
     n_iterations = args.total_steps // batch_size
@@ -142,9 +150,9 @@ def train_agent(args, trial=None, queue=None):
         group_name = run_name
         run_name = run_name + "_" + str(random_trial_number)
 
-        envs = build_env(args.env_id, n_env=args.n_envs, view_size=args.view_size)
+        envs: gym.vector.VectorEnv = build_env(args.env_id, n_env=args.n_envs, view_size=args.view_size)
 
-        obs_dim = envs.single_observation_space.shape[-1]
+        obs_dim = envs.single_observation_space.shape[-1]  # type: ignore
 
         print("Observations:", obs_dim)
         if isinstance(envs.single_action_space, gym.spaces.Discrete):
@@ -166,14 +174,15 @@ def train_agent(args, trial=None, queue=None):
             # elif any(substring in args.env_id for substring in ['forex']):
             #    action_dim = 2
             else:
-                action_dim = envs.single_action_space.n
-                action_indices = [i for i in range(action_dim)]
+                action_dim = int(envs.single_action_space.n)
+                action_indices = list(range(action_dim))
             print("Actions:", action_dim)
         elif isinstance(envs.single_action_space, gym.spaces.Box):
             action_dim = envs.single_action_space.shape[-1]
-            action_indices = [i for i in range(action_dim)]
+            action_indices = list(range(action_dim))
             print("Actions:", action_dim)
-            # raise NotImplementedError
+        else:
+            raise NotImplementedError(f"Action space type '{type(envs.single_action_space)}' not implemented")
 
         if args.track:
             wandb_run = wandb.init(
@@ -202,6 +211,8 @@ def train_agent(args, trial=None, queue=None):
             critic = Critic_MLP(num_layers=args.num_layers, neurons_per_layer=args.neurons_per_layer)
         elif args.critic == "sdt":
             critic = Critic_SDT(depth=args.depth, temperature=args.temperature)  # , temp=1)
+        else:
+            raise NotImplementedError(f"Critic '{args.critic}' not implemented")
         critic.apply = jax.jit(critic.apply)
         if args.actor == "mlp" or args.actor == "stateActionDT":
             if args.action_type == "discrete":
@@ -214,15 +225,8 @@ def train_agent(args, trial=None, queue=None):
                 )
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for MLP's
             args.accumulate_gradients_every = 1  # do not accumulate gradients for MLP's
-            learning_rate_actor = args.learning_rate_actor
             actor.apply = jax.jit(actor.apply)
         elif args.actor == "sympol":
-            learning_rate_actor_weights = args.learning_rate_actor_weights
-            learning_rate_actor_split_values = args.learning_rate_actor_split_values
-            learning_rate_actor_split_idx_array = args.learning_rate_actor_split_idx_array
-            learning_rate_actor_leaf_array = args.learning_rate_actor_leaf_array
-            learning_rate_actor_log_std = args.learning_rate_actor_log_std
-
             actor = SYMPOL_RL(
                 obs_dim=obs_dim,
                 action_dim=action_dim,
@@ -236,9 +240,10 @@ def train_agent(args, trial=None, queue=None):
             )  # , temp=1)
 
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for SDT's
-            learning_rate_actor = args.learning_rate_actor
             args.accumulate_gradients_every = 1  # do not accumulate gradients for SDT's
             actor.apply = jax.jit(actor.apply)
+        else:
+            raise ValueError(f"Actor '{args.actor}' not implemented")
 
         if args.adamW:
             critic_state = TrainState.create(
@@ -258,6 +263,11 @@ def train_agent(args, trial=None, queue=None):
             )
 
         if args.actor == "sympol":
+            learning_rate_actor_weights = args.learning_rate_actor_weights
+            learning_rate_actor_split_values = args.learning_rate_actor_split_values
+            learning_rate_actor_split_idx_array = args.learning_rate_actor_split_idx_array
+            learning_rate_actor_leaf_array = args.learning_rate_actor_leaf_array
+            learning_rate_actor_log_std = args.learning_rate_actor_log_std
 
             def map_nested_fn(fn):
                 """Recursively apply `fn` to key-value pairs of a nested dict."""
@@ -328,9 +338,9 @@ def train_agent(args, trial=None, queue=None):
                         ),
                         indices=actor.init_indices(actor_key) if args.actor == "sympol" else None,
                     )
-            else:
+            else:  # noqa
                 if args.adamW:
-                    actor_state = ActorTrainState.create(
+                    actor_state: ActorTrainState = ActorTrainState.create(
                         apply_fn=None,
                         params=actor.init(actor_key, jnp.array([envs.single_observation_space.sample()])),
                         tx=optax.chain(
@@ -387,6 +397,7 @@ def train_agent(args, trial=None, queue=None):
                     )
 
         else:
+            learning_rate_actor = args.learning_rate_actor
             if args.adamW:
                 actor_state = ActorTrainState.create(
                     apply_fn=None,
@@ -428,26 +439,26 @@ def train_agent(args, trial=None, queue=None):
 
         @jax.jit
         def get_action_and_value(
-            actor_state: TrainState,
-            critic_state: TrainState,
+            actor_state: ActorTrainState,
+            critic_state: ActorTrainState,
             next_obs: np.ndarray,
             next_done: np.ndarray,
             storage: Storage,
             step: int,
-            key: jax.random.PRNGKey,
+            key: chex.PRNGKey,
         ):
             """sample action, calculate value, logprob, entropy, and update storage"""
             if args.action_type == "discrete":
-                action_logits = actor.apply(actor_state.params, next_obs, indices=actor_state.indices)
+                action_logits: jax.Array = actor.apply(actor_state.params, next_obs, indices=actor_state.indices)  # pyright: ignore[reportAssignmentType]
                 action_distribution = distrax.Categorical(logits=action_logits)
-                value = critic.apply(critic_state.params, next_obs)
+                value: jax.Array = critic.apply(critic_state.params, next_obs)  # pyright: ignore[reportAssignmentType]
 
                 # Sample discrete actions from Normal distribution
                 key, subkey = jax.random.split(key)
                 action = action_distribution.sample(seed=subkey)
 
                 logprob = action_distribution.log_prob(action)  # .sum(-1)
-                storage = storage.replace(
+                storage = storage.replace(  # type: ignore[attr-defined]
                     obs=storage.obs.at[step].set(next_obs),
                     dones=storage.dones.at[step].set(next_done),
                     actions=storage.actions.at[step].set(action),
@@ -455,17 +466,18 @@ def train_agent(args, trial=None, queue=None):
                     values=storage.values.at[step].set(value.squeeze()),
                 )
             else:
+                breakpoint()
                 result = actor.apply(actor_state.params, next_obs, indices=actor_state.indices)
                 action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
 
-                value = critic.apply(critic_state.params, next_obs)
+                value: jax.Array = critic.apply(critic_state.params, next_obs)  # pyright: ignore[reportAssignmentType]
 
                 # Sample continuous actions from Normal distribution
                 key, subkey = jax.random.split(key)
                 action = action_distribution.sample(seed=subkey)
                 logprob = action_distribution.log_prob(action)  # .sum(-1)
 
-                storage = storage.replace(
+                storage = storage.replace(  # type: ignore[attr-defined]
                     obs=storage.obs.at[step].set(next_obs),
                     dones=storage.dones.at[step].set(next_done),
                     actions=storage.actions.at[step].set(action),
@@ -485,8 +497,10 @@ def train_agent(args, trial=None, queue=None):
             """calculate value, logprob of supplied `action`, and entropy"""
 
             if args.action_type == "discrete":
-                logits = actor.apply(actor_state_params, x, indices=actor_state.indices)
-                value = critic.apply(critic_state_params, x).squeeze()
+                if TYPE_CHECKING:
+                    assert isinstance(actor, Actor_MLP)
+                logits: jax.Array = actor.apply(actor_state_params, x, indices=actor_state.indices)  # pyright: ignore[reportAssignmentType]
+                value = critic.apply(critic_state_params, x).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
 
                 action_distribution = distrax.Categorical(logits=logits)
                 logprob = action_distribution.log_prob(action)
@@ -495,13 +509,13 @@ def train_agent(args, trial=None, queue=None):
                 result = actor.apply(actor_state_params, x, indices=actor_state.indices)
                 action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
 
-                value = critic.apply(critic_state_params, x).squeeze()
+                value = critic.apply(critic_state_params, x).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
                 logprob = action_distribution.log_prob(action)
                 entropy = action_distribution.entropy()
 
             return logprob, entropy, value
 
-        def compute_gae_once(carry, inp, gamma, gae_lambda):
+        def _compute_gae_once(carry, inp, gamma, gae_lambda):
             advantages = carry
             nextdone, nextvalues, curvalues, reward = inp
             nextnonterminal = 1.0 - nextdone
@@ -510,7 +524,7 @@ def train_agent(args, trial=None, queue=None):
             advantages = delta + gamma * gae_lambda * nextnonterminal * advantages
             return advantages, advantages
 
-        compute_gae_once = partial(compute_gae_once, gamma=args.gamma, gae_lambda=args.gae_lambda)
+        compute_gae_once = partial(_compute_gae_once, gamma=args.gamma, gae_lambda=args.gae_lambda)
 
         @jax.jit
         def compute_gae(
@@ -519,7 +533,9 @@ def train_agent(args, trial=None, queue=None):
             next_done: np.ndarray,
             storage: Storage,
         ):
-            next_value = critic.apply(critic_state.params, next_obs).squeeze()
+            next_value = critic.apply(
+                critic_state.params, next_obs
+            ).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
 
             advantages = jnp.zeros((args.n_envs,))
             dones = jnp.concatenate([storage.dones, next_done[None, :]], axis=0)
@@ -527,7 +543,7 @@ def train_agent(args, trial=None, queue=None):
             _, advantages = jax.lax.scan(
                 compute_gae_once, advantages, (dones[1:], values[1:], values[:-1], storage.rewards), reverse=True
             )
-            storage = storage.replace(
+            storage = storage.replace(  # type: ignore[attr-defined]
                 advantages=advantages,
                 returns=advantages + storage.values,
             )
@@ -562,10 +578,12 @@ def train_agent(args, trial=None, queue=None):
             actor_state: TrainState,
             critic_state: TrainState,
             storage: Storage,
-            key: jax.random.PRNGKey,
+            key: chex.PRNGKey,
             accumulate_gradients_every: int,
-        ):
-            def update_epoch(carry, unused_inp):
+        ) -> tuple[
+            TrainState, TrainState, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, chex.PRNGKey
+        ]:
+            def update_epoch(carry: tuple[TrainState, TrainState, chex.PRNGKey], unused_inp):
                 actor_state, critic_state, key = carry
                 key, subkey = jax.random.split(key)
 
@@ -583,7 +601,10 @@ def train_agent(args, trial=None, queue=None):
                 flatten_storage = jax.tree_map(flatten, storage)
                 shuffled_storage = jax.tree_map(convert_data, flatten_storage)
 
-                def update_minibatch(carry, minibatch):
+                def update_minibatch(carry: tuple[TrainState, TrainState], minibatch: Storage) -> tuple[
+                    tuple[TrainState, TrainState],
+                    tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, Any],
+                ]:
                     actor_state, critic_state = carry
                     (loss, (pg_loss, v_loss, entropy_loss, approx_kl)), (actor_grads, critic_grads) = (
                         ppo_loss_base_grad_fn(
@@ -596,9 +617,9 @@ def train_agent(args, trial=None, queue=None):
                             minibatch.returns,
                         )
                     )
-                    critic_state = critic_state.apply_gradients(grads=critic_grads)
+                    critic_state: TrainState = critic_state.apply_gradients(grads=critic_grads)
                     actor_grad_accum = jax.tree_util.tree_map(lambda x, y: x + y, actor_grads, actor_state.grad_accum)
-                    actor_state = actor_state.apply_gradients(grads=actor_grads)
+                    actor_state: TrainState = actor_state.apply_gradients(grads=actor_grads)
 
                     def update_fn():
                         grads = jax.tree_util.tree_map(lambda x: x / accumulate_gradients_every, actor_grad_accum)
@@ -641,9 +662,28 @@ def train_agent(args, trial=None, queue=None):
             )
             return actor_state, critic_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key
 
-        def create_rollout(n_steps, envs):
-            def rollout_(actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step):
-                for step in range(0, n_steps):
+        def create_rollout(n_steps: int, envs: "gym.Env | gym.vector.VectorEnv"):
+
+            def rollout_(
+                actor_state: ActorTrainState,
+                critic_state: ActorTrainState,
+                episode_stats: EpisodeStatistics,
+                next_obs: np.ndarray,
+                next_done: NDArray[np.bool_] | bool,
+                storage: Storage,
+                key: chex.PRNGKey,
+                global_step: int,
+            ) -> tuple[
+                ActorTrainState,
+                ActorTrainState,
+                EpisodeStatistics,
+                np.ndarray,
+                NDArray[np.bool_],
+                Storage,
+                chex.PRNGKey,
+                int,
+            ]:
+                for step in range(n_steps):
                     global_step += args.n_envs
                     storage, action, key = get_action_and_value(
                         actor_state, critic_state, next_obs, next_done, storage, step, key
@@ -658,7 +698,7 @@ def train_agent(args, trial=None, queue=None):
                     next_obs, reward, next_done, trunc, info = envs.step(action)
                     new_episode_return = episode_stats.episode_returns + reward
                     new_episode_length = episode_stats.episode_lengths + 1
-                    episode_stats = episode_stats.replace(
+                    episode_stats = episode_stats.replace(  # type: ignore[attr-defined]
                         episode_returns=(new_episode_return) * (1 - next_done) * (1 - trunc),
                         episode_lengths=(new_episode_length) * (1 - next_done) * (1 - trunc),
                         # only update the `returned_episode_returns` if the episode is done
@@ -673,7 +713,7 @@ def train_agent(args, trial=None, queue=None):
                             episode_stats.returned_episode_lengths,
                         ),
                     )
-                    storage = storage.replace(rewards=storage.rewards.at[step].set(reward))
+                    storage = storage.replace(rewards=storage.rewards.at[step].set(reward))  # pyright: ignore[reportAttributeAccessIssue]
                 return actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step
 
             return rollout_
@@ -733,6 +773,9 @@ def train_agent(args, trial=None, queue=None):
                 current_eval = global_step // args.eval_freq
             start_time_cleaned = time.time()
 
+            if TYPE_CHECKING:
+                assert envs.single_observation_space.shape is not None
+                assert envs.single_action_space.shape is not None
             storage = Storage(
                 obs=jnp.zeros((n_steps, args.n_envs) + envs.single_observation_space.shape),
                 actions=jnp.zeros((n_steps, args.n_envs) + envs.single_action_space.shape, dtype=jnp.int32),
@@ -743,7 +786,7 @@ def train_agent(args, trial=None, queue=None):
                 returns=jnp.zeros((n_steps, args.n_envs)),
                 rewards=jnp.zeros((n_steps, args.n_envs)),
             )
-            actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step = rollout(
+            actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step = rollout(  # pyright: ignore[reportPossiblyUnboundVariable]
                 actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step
             )
             storage = compute_gae(critic_state, next_obs, next_done, storage)
@@ -766,7 +809,11 @@ def train_agent(args, trial=None, queue=None):
                     True if args.render_each_eval else True if global_step + batch_size >= args.total_steps else False
                 )
 
-                def fit_stateActionDT(actor_state, env_id, n_episodes, name_appendix, seed=1_000):
+                def fit_stateActionDT(
+                    actor_state: ActorTrainState, env_id: str, n_episodes: int, name_appendix, seed: int = 1_000
+                ):
+                    assert envs.single_observation_space.shape is not None
+                    assert envs.single_action_space.shape is not None
                     action_obs_store = ObservationActionBuffer(
                         # obs=jnp.zeros((n_steps, args.n_envs) + envs.single_observation_space.shape),
                         obs=jnp.zeros((n_steps, n_episodes) + envs.single_observation_space.shape),
@@ -786,6 +833,7 @@ def train_agent(args, trial=None, queue=None):
                             actor_params = actor_state.params
 
                             if args.action_type == "discrete":
+                                breakpoint()
                                 action_logits = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
                                 action = jnp.argmax(action_logits, axis=1)
                                 action = jnp.squeeze(
@@ -825,8 +873,8 @@ def train_agent(args, trial=None, queue=None):
 
                     # Initialize decision tree
                     if args.action_type == "discrete":
-                        decision_tree = DecisionTreeClassifier(max_depth=args.depth)
-                    else:
+                        decision_tree: BaseDecisionTree = DecisionTreeClassifier(max_depth=args.depth)
+                    else:  # noqa
                         if action_dim == 1:
                             decision_tree = DecisionTreeRegressor(max_depth=args.depth)
                         else:
@@ -845,15 +893,22 @@ def train_agent(args, trial=None, queue=None):
 
                     return decision_tree
 
-                def evaluate_agent(actor_state, env_id, n_episodes, name_appendix, seed=100, decision_tree=None):
+                def evaluate_agent(
+                    actor_state: ActorTrainState,
+                    env_id: str,
+                    n_episodes: int,
+                    name_appendix: str,
+                    seed: int = 100,
+                    decision_tree: Optional[BaseDecisionTree]=None,
+                ) -> tuple[list[int], list[int], int]:
                     video_folder = "videos/wandb"
                     if not os.path.exists(video_folder):
                         os.makedirs(video_folder)
                     # temp_env = Monitor(temp_env, video_folder) #, force=True
 
-                    score = []
-                    score_interpretable = []
-                    node_count = 0
+                    score: list[float] = []
+                    score_interpretable: list[float] = []
+                    node_count: int = 0
 
                     for episode_index in range(n_episodes):
                         if args.actor == "stateActionDT":
@@ -898,8 +953,9 @@ def train_agent(args, trial=None, queue=None):
 
                                 flat_obs = obs.reshape(1, -1)
                                 if args.action_type == "discrete":
+                                    decision_tree = cast("BaseDecisionTree", decision_tree)
                                     action = decision_tree.predict(flat_obs)[0]
-                                else:
+                                else:  # noqa
                                     if action_dim == 1:
                                         action = decision_tree.predict(flat_obs)
                                     else:
@@ -1053,7 +1109,7 @@ def train_agent(args, trial=None, queue=None):
                                         indices=actor_state.indices,
                                     )
 
-                                    action = jnp.argmax(action_logits, axis=1)
+                                    action = jnp.argmax(action_logits, axis=1)  # pyright: ignore[reportArgumentType]
                                     action = jnp.squeeze(
                                         action, axis=0
                                     )  # jnp.squeeze(action, axis=0) if action.shape[0] == 1 else action #action[0]
@@ -1143,7 +1199,7 @@ def train_agent(args, trial=None, queue=None):
                                         split_values=split_values,
                                         split_indices=split_indices,
                                         leaf_values=leaf_values,
-                                        features_by_estimator=[i for i in range(obs_dim)],
+                                        features_by_estimator=list(range(obs_dim)),
                                         image_path=image_path,
                                         observation_labels=None
                                         if args.env_id not in OBSERVATION_LABELS.keys()
@@ -1443,6 +1499,9 @@ def train_agent(args, trial=None, queue=None):
                             learning_rate_actor * lr_scheduler_state.scale
                         )
                     else:
+                        if TYPE_CHECKING:
+                            actor_state.opt_state = cast(tuple, actor_state.opt_state)
+                            reveal_type(actor_state.opt_state)
                         actor_state.opt_state[1][0]["estimator_weights"][0].hyperparams["learning_rate"] = (
                             learning_rate_actor_weights * lr_scheduler_state.scale
                         )
@@ -1562,6 +1621,9 @@ def train_agent(args, trial=None, queue=None):
                     pass
 
             if args.checkpoint:
+                import orbax.checkpoint
+                from flax.training import orbax_utils
+
                 end_time = time.time()
                 elapsed_time = end_time - start_time
                 checkpoint_path = os.path.join(args.path, args.run_name)
@@ -1604,7 +1666,7 @@ def train_agent(args, trial=None, queue=None):
 
             iteration = iteration + 1
         if args.track:
-            wandb_run.finish()
+            wandb_run.finish()  # pyright: ignore[reportPossiblyUnboundVariable]
         envs.close()
 
         # trial_scores.append(np.mean(avg_score_list[-5:]))
@@ -1612,13 +1674,13 @@ def train_agent(args, trial=None, queue=None):
 
     if queue is None:
         return np.mean(trial_scores)
-    else:
-        queue.put(np.mean(trial_scores))  # Put the result in the queue
+    queue.put(np.mean(trial_scores))  # Put the result in the queue
+    return None
 
 
-def multiprocessing_objective_fn(args, trial):
+def multiprocessing_objective_fn(args, trial: optuna.Trial):
     queue = multiprocessing.Queue()
-    p = multiprocessing.Process(target=train_agent, args=(args, trial, queue))
+    p = multiprocessing.Process(target=train_agent, args=(args, trial, queue), daemon=True)
     p.start()
     p.join()
     result = queue.get()
