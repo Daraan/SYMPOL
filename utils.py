@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import copy
 import functools
 import logging
 import operator
 import random
 from functools import reduce
-from typing import Any, MutableMapping, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, MutableMapping, Optional, Tuple, Union, cast
 
-import chex
 import flax
 import flax.struct
 import graphviz
@@ -29,6 +30,10 @@ from typing_extensions import TypeAliasType
 
 from sdt import entmax15JAX
 
+if TYPE_CHECKING:
+    from gymnasium.envs.registration import EnvSpec as _EnvSpec
+    import chex
+
 OBSERVATION_LABELS = {
     "LunarLander-v2": [
         "x",
@@ -42,6 +47,8 @@ OBSERVATION_LABELS = {
     ]
 }
 
+
+EnvSpec = TypeAliasType("EnvSpec", "str | _EnvSpec")
 EnvType = TypeAliasType("EnvType", gym.Env | environment_gymnax.Environment)
 
 _logger = logging.getLogger(__name__)
@@ -382,13 +389,23 @@ class AutoResetWrapper(gym.Wrapper):
         return self.observation, self.info
 
 
-def build_env(env_id, n_env, view_size=3) -> "gym.vector.AsyncVectorEnv | gym.Env | ObservationWrapper":
-    env = gym.vector.AsyncVectorEnv | gym.Env | ObservationWrapper
-    if n_env > 1:
-        env = gym.make(id=env_id)  # , render_mode="rgb_array")
+def _make_env(env_id: str | _EnvSpec, *args, **kwargs):
+    try:
+        return gym.make(env_id, *args, **kwargs)  # , render_mode="rgb_array")
+    except gym.error.DeprecatedEnv as e:
+        # Gym reports a warning here
+        env_id = str(e).split("Please use ")[-1].split(" instead.")[0].strip(" '`")
+        return gym.make(env_id, *args, **kwargs)
 
+# Only return VectorEnv for now for performance reasons of the type-checker.
+def build_env(env_id: str | _EnvSpec, n_env, view_size=3) -> "gym.vector.VectorEnv":  #  | gym.Env | ObservationWrapper
+    env = gym.vector.VectorEnv | gym.Env | ObservationWrapper
+    if n_env > 1:
+        env = _make_env(env_id)
     else:
-        env = gym.make(id=env_id, render_mode="rgb_array")  # , render_mode="rgb_array")
+        env = _make_env(env_id, render_mode="rgb_array")
+    if not isinstance(env_id, str):
+        env_id = env_id.id
 
     if "MiniGrid" in env_id:
         env = ViewSizeWrapper(env, agent_view_size=view_size)
