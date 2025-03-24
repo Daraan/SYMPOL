@@ -1,6 +1,7 @@
 import argparse
 import sys
-import itertools
+
+from config_types.args_types import CLIArgs
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -23,7 +24,7 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         return namespace
 
 
-def get_args():
+def get_args() -> CLIArgs:
     parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
     parser.add_argument(
@@ -211,8 +212,8 @@ def get_args():
         "--critic",
         type=str,
         default="mlp",
-        choices=["mlp", "sdt", "sympol"],
-        help="Specify the actor type: mlp' or 'sdt'",
+        choices=["mlp", "sdt"],
+        help="Specify the critic type: 'mlp', 'sdt''",
     )
 
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor for future rewards")
@@ -323,5 +324,4 @@ def get_args():
                 break
     if args.overwrite_explicit:
         args.__dict__.update(explicit_arg_values)
-
-    return args
+    return CLIArgs(**vars(args))

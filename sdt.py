@@ -1,3 +1,4 @@
+from typing import Literal
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.linen.initializers import normal
@@ -121,7 +122,7 @@ class Actor_SDT(nn.Module):
     action_dim: int
     depth: int = 5
     temperature: float = 1.0
-    action_type: str = "discrete"  # "continuous"
+    action_type: Literal["discrete", "continuous"] = "discrete"  # "continuous"
 
     @nn.compact
     def __call__(self, obs: jnp.ndarray, max_path=False, **kwargs):

@@ -1,10 +1,10 @@
 from functools import partial
-import jax
-import jax.numpy as jnp
+from typing import Mapping
 
 # from torch.autograd import Function
 import distrax
-
+import jax
+import jax.numpy as jnp
 from flax import linen as nn
 from flax import struct
 
@@ -127,7 +127,7 @@ class SYMPOL_RL:
         return indices
 
     @jax.jit
-    def apply(self, params, inputs, indices):
+    def apply(self, params: Mapping, inputs: jax.Array, indices: dict):
         split_values = params["split_values"]
         estimator_weights = params["estimator_weights"]
         split_index_array = params["split_idx_array"]

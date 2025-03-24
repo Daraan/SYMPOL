@@ -1,7 +1,20 @@
+from __future__ import annotations
+
 # for optuna
+from typing import TYPE_CHECKING, Literal, cast
+
+from config_types.params_types import MLPParams, SDTParams, SympolParams
+
+
+if TYPE_CHECKING:
+    from config_types.params_types import ParamsDictType
+    from optuna import Trial
+
+    from config_types.params_types import MLPParams, SDTParams, SympolParams
+
 
 # https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
-def modify_parameters_by_environment(trial, params, env_id):
+def modify_parameters_by_environment(trial: Trial, params, env_id):
     if False:
         if env_id == "CartPole-v1":
             params["n_steps"] = trial.suggest_int("n_steps", 16, 64)
@@ -22,8 +35,8 @@ def modify_parameters_by_environment(trial, params, env_id):
     return params
 
 
-def suggest_config_sympol(trial, env_id=""):
-    params = {
+def suggest_config_sympol(trial: Trial, env_id="") -> SympolParams:
+    params: SympolParams = {
         "learning_rate_actor_weights": trial.suggest_float("learning_rate_actor_weights", 0.0001, 0.1, log=True),
         "learning_rate_actor_split_values": trial.suggest_float(
             "learning_rate_actor_split_values", 0.0001, 0.05, log=True
@@ -59,14 +72,14 @@ def suggest_config_sympol(trial, env_id=""):
     return params
 
 
-def suggest_config_mlp(trial, env_id=""):
-    params = {
+def suggest_config_mlp(trial: Trial, env_id="") -> MLPParams:
+    params: MLPParams = {
         "num_layers": trial.suggest_int("num_layers", 1, 3),
         "neurons_per_layer": trial.suggest_int("neurons_per_layer", 16, 256),
         "learning_rate_actor": trial.suggest_float("learning_rate_actor", 0.0001, 0.01, log=True),
         "learning_rate_critic": trial.suggest_float("learning_rate_critic", 0.0001, 0.01, log=True),
         "reduce_lr": trial.suggest_categorical("reduce_lr", [False]),
-        "adamW": trial.suggest_categorical("adamW", [False]),
+        "adamW": trial.suggest_categorical("adamW", [False]),  # type: ignore[assignment]
         "minibatch_size": trial.suggest_categorical("minibatch_size", [64, 128, 256, 512]),
         "n_update_epochs": trial.suggest_int("n_update_epochs", 1, 10),
         "max_grad_norm": trial.suggest_categorical("max_grad_norm", [0.1, 0.5, 1.0, 1000]),
@@ -81,38 +94,38 @@ def suggest_config_mlp(trial, env_id=""):
     return params
 
 
-def suggest_config_sdt(trial, env_id=""):
-    params = {
+def suggest_config_sdt(trial: Trial, env_id="") -> SDTParams:
+    params: SDTParams = {
+        "depth": trial.suggest_int("depth", 4, 8),
+        "learning_rate_actor": trial.suggest_float("learning_rate_actor", 0.0001, 0.01, log=True),
+        "learning_rate_critic": trial.suggest_float("learning_rate_critic", 0.0001, 0.01, log=True),
+        "reduce_lr": trial.suggest_categorical("reduce_lr", [False]),
+        "temperature": trial.suggest_categorical("temperature", [0.01, 0.05, 0.1, 0.5, 1, 1, 1, 1]),
+        "adamW": trial.suggest_categorical("adamW", [False]),  # type: ignore[assignment]
+        "critic": trial.suggest_categorical("critic", ["mlp", "sdt"]),  # type: ignore[assignment]
+        "minibatch_size": trial.suggest_categorical("minibatch_size", [64, 128, 256, 512]),
+        "n_update_epochs": trial.suggest_int("n_update_epochs", 1, 10),
+        "max_grad_norm": trial.suggest_categorical("max_grad_norm", [0.1, 0.5, 1.0, 1000]),
+        "norm_adv": trial.suggest_categorical("norm_adv", [True, False]),
+        "ent_coef": trial.suggest_categorical("ent_coef", [0.0, 0.1, 0.2]),
+        "vf_coef": trial.suggest_categorical("vf_coef", [0.25, 0.5, 0.75]),
+        "gamma": trial.suggest_categorical("gamma", [0.9, 0.95, 0.99, 0.999]),
+        "gae_lambda": trial.suggest_categorical("gae_lambda", [0.9, 0.95, 0.99]),
+    }
+    params = modify_parameters_by_environment(trial, params, env_id)
+
+    return params
+
+
+def suggest_config_dsdt(trial: Trial, env_id="") -> SDTParams:
+    params: SDTParams = {
         "depth": trial.suggest_int("depth", 4, 8),
         "learning_rate_actor": trial.suggest_float("learning_rate_actor", 0.0001, 0.01, log=True),
         "learning_rate_critic": trial.suggest_float("learning_rate_critic", 0.0001, 0.01, log=True),
         "reduce_lr": trial.suggest_categorical("reduce_lr", [False]),
         "adamW": trial.suggest_categorical("adamW", [False]),
         "temperature": trial.suggest_categorical("temperature", [0.01, 0.05, 0.1, 0.5, 1, 1, 1, 1]),
-        "critic": trial.suggest_categorical("critic", ["mlp", "sdt"]),
-        "minibatch_size": trial.suggest_categorical("minibatch_size", [64, 128, 256, 512]),
-        "n_update_epochs": trial.suggest_int("n_update_epochs", 1, 10),
-        "max_grad_norm": trial.suggest_categorical("max_grad_norm", [0.1, 0.5, 1.0, 1000]),
-        "norm_adv": trial.suggest_categorical("norm_adv", [True, False]),
-        "ent_coef": trial.suggest_categorical("ent_coef", [0.0, 0.1, 0.2]),
-        "vf_coef": trial.suggest_categorical("vf_coef", [0.25, 0.5, 0.75]),
-        "gamma": trial.suggest_categorical("gamma", [0.9, 0.95, 0.99, 0.999]),
-        "gae_lambda": trial.suggest_categorical("gae_lambda", [0.9, 0.95, 0.99]),
-    }
-    params = modify_parameters_by_environment(trial, params, env_id)
-
-    return params
-
-
-def suggest_config_dsdt(trial, env_id=""):
-    params = {
-        "depth": trial.suggest_int("depth", 4, 8),
-        "learning_rate_actor": trial.suggest_float("learning_rate_actor", 0.0001, 0.01, log=True),
-        "learning_rate_critic": trial.suggest_float("learning_rate_critic", 0.0001, 0.01, log=True),
-        "reduce_lr": trial.suggest_categorical("reduce_lr", [False]),
-        "adamW": trial.suggest_categorical("adamW", [False]),
-        "temperature": trial.suggest_categorical("temperature", [0.01, 0.05, 0.1, 0.5, 1, 1, 1, 1]),
-        "critic": trial.suggest_categorical("critic", ["mlp", "sdt"]),
+        "critic": cast("Literal['mlp', 'sdt']", trial.suggest_categorical("critic", ("mlp", "sdt"))),
         "minibatch_size": trial.suggest_categorical("minibatch_size", [64, 128, 256, 512]),
         "n_update_epochs": trial.suggest_int("n_update_epochs", 1, 10),
         "max_grad_norm": trial.suggest_categorical("max_grad_norm", [0.1, 0.5, 1.0, 1000]),
@@ -128,14 +141,14 @@ def suggest_config_dsdt(trial, env_id=""):
     return params
 
 
-def suggest_config_stateActionDT(trial, env_id=""):
-    params = {
+def suggest_config_stateActionDT(trial: Trial, env_id="") -> MLPParams:
+    params: MLPParams = {
         "num_layers": trial.suggest_int("num_layers", 1, 3),
         "neurons_per_layer": trial.suggest_int("neurons_per_layer", 16, 256),
         "learning_rate_actor": trial.suggest_float("learning_rate_actor", 0.0001, 0.01, log=True),
         "learning_rate_critic": trial.suggest_float("learning_rate_critic", 0.0001, 0.01, log=True),
         "reduce_lr": trial.suggest_categorical("reduce_lr", [False]),
-        "adamW": trial.suggest_categorical("adamW", [False]),
+        "adamW": trial.suggest_categorical("adamW", [False]),  # type: ignore[assignment]
         "minibatch_size": trial.suggest_categorical("minibatch_size", [64, 128, 256, 512]),
         "n_update_epochs": trial.suggest_int("n_update_epochs", 1, 10),
         "max_grad_norm": trial.suggest_categorical("max_grad_norm", [0.1, 0.5, 1.0, 1000]),
@@ -150,7 +163,7 @@ def suggest_config_stateActionDT(trial, env_id=""):
     return params
 
 
-cartpole = {
+cartpole: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.2,
@@ -216,7 +229,7 @@ cartpole = {
 }
 
 
-pendulum = {
+pendulum: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -282,7 +295,7 @@ pendulum = {
 }
 
 
-mountaincar = {
+mountaincar: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -347,7 +360,7 @@ mountaincar = {
     },
 }
 
-mountaincarcontinuous = {
+mountaincarcontinuous: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -413,7 +426,7 @@ mountaincarcontinuous = {
 }
 
 
-acrobot = {
+acrobot: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.0,
@@ -478,7 +491,7 @@ acrobot = {
     },
 }
 
-lunarlander = {
+lunarlander: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -544,7 +557,7 @@ lunarlander = {
 }
 
 
-minigrid_lavagaps5 = {
+minigrid_lavagaps5: dict[str, ParamsDictType] = {
     "mlp": {  # LavaGapS5
         "adamW": False,
         "ent_coef": 0.1,
@@ -609,7 +622,7 @@ minigrid_lavagaps5 = {
     },
 }
 
-minigrid_doorkey = {
+minigrid_doorkey: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -674,7 +687,7 @@ minigrid_doorkey = {
     },
 }
 
-minigrid_empty = {
+minigrid_empty: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -739,7 +752,7 @@ minigrid_empty = {
     },
 }
 
-minigrid_lavagaps7 = {
+minigrid_lavagaps7: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,
@@ -804,7 +817,7 @@ minigrid_lavagaps7 = {
     },
 }
 
-minigrid_distshift1 = {
+minigrid_distshift1: dict[str, ParamsDictType] = {
     "mlp": {
         "adamW": False,
         "ent_coef": 0.1,

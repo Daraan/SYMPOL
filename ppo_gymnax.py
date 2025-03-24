@@ -7,7 +7,7 @@ import pickle
 import random
 import time
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import distrax
 import flax
@@ -19,7 +19,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import optuna
-import wandb
 from distrax import MultivariateNormalDiag, Normal
 from flax import linen as nn
 from flax.training.train_state import TrainState
@@ -34,6 +33,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
 
 import configs
+import wandb
 from args import get_args
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
 from sdt import Actor_SDT, Critic_SDT
@@ -50,6 +50,9 @@ from utils import (
     plot_decision_tree,
     plot_decision_tree_soft,
 )
+
+if TYPE_CHECKING:
+    import chax
 
 # os.environ['MUJOCO_GL'] = 'egl'
 
@@ -155,6 +158,7 @@ def train_agent(args, trial=None, queue=None):
             sys.exit("Environment not implemented in gymnax")
 
         envs, env_params = gymnax.make(args.env_id)
+        env_params = cast("gymnax.environments.EnvParams", env_params)
         if args.normEnv:
             print("NORMALIZE")
             envs = NormalizeObservationWrapper(envs, env_params)
@@ -201,6 +205,8 @@ def train_agent(args, trial=None, queue=None):
             critic = Critic_MLP(num_layers=args.num_layers, neurons_per_layer=args.neurons_per_layer)
         elif args.critic == "sdt":
             critic = Critic_SDT(depth=args.depth, temperature=args.temperature)  # , temp=1)
+        else:
+            raise ValueError(f"Unsupported critic type {args.critic}")
         critic.apply = jax.jit(critic.apply)
         if args.actor == "mlp" or args.actor == "stateActionDT":
             if args.action_type == "discrete":
@@ -570,13 +576,13 @@ def train_agent(args, trial=None, queue=None):
 
         @jax.jit
         def update_ppo(
-            actor_state: TrainState,
+            actor_state: ActorTrainState,
             critic_state: TrainState,
             storage: Storage,
-            key: jax.random.PRNGKey,
+            key: chax.PRNGKey,
             accumulate_gradients_every: int,
         ):
-            def update_epoch(carry, unused_inp):
+            def update_epoch(carry: tuple[TrainState, TrainState, chax.PRNGKey], unused_inp):
                 actor_state, critic_state, key = carry
                 key, subkey = jax.random.split(key)
 
@@ -594,7 +600,7 @@ def train_agent(args, trial=None, queue=None):
                 flatten_storage = jax.tree_map(flatten, storage)
                 shuffled_storage = jax.tree_map(convert_data, flatten_storage)
 
-                def update_minibatch(carry, minibatch):
+                def update_minibatch(carry: tuple[ActorTrainState, TrainState], minibatch):
                     actor_state, critic_state = carry
                     (loss, (pg_loss, v_loss, entropy_loss, approx_kl)), (actor_grads, critic_grads) = (
                         ppo_loss_base_grad_fn(

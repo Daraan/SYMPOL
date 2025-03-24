@@ -6,7 +6,19 @@ import logging
 import operator
 import random
 from functools import reduce
-from typing import TYPE_CHECKING, Any, MutableMapping, Optional, Tuple, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+    Collection,
+    overload,
+)
 
 import flax
 import flax.struct
@@ -31,8 +43,8 @@ from typing_extensions import TypeAliasType
 from sdt import entmax15JAX
 
 if TYPE_CHECKING:
-    from gymnasium.envs.registration import EnvSpec as _EnvSpec
     import chex
+    from gymnasium.envs.registration import EnvSpec as _EnvSpec
 
 OBSERVATION_LABELS = {
     "LunarLander-v2": [
@@ -49,7 +61,7 @@ OBSERVATION_LABELS = {
 
 
 EnvSpec = TypeAliasType("EnvSpec", "str | _EnvSpec")
-EnvType = TypeAliasType("EnvType", gym.Env | environment_gymnax.Environment)
+EnvType = TypeAliasType("EnvType", gym.Env | environment_gymnax.Environment | gym.vector.VectorEnv)
 
 _logger = logging.getLogger(__name__)
 
@@ -397,9 +409,20 @@ def _make_env(env_id: str | _EnvSpec, *args, **kwargs):
         env_id = str(e).split("Please use ")[-1].split(" instead.")[0].strip(" '`")
         return gym.make(env_id, *args, **kwargs)
 
+
 # Only return VectorEnv for now for performance reasons of the type-checker.
-def build_env(env_id: str | _EnvSpec, n_env, view_size=3) -> "gym.vector.VectorEnv":  #  | gym.Env | ObservationWrapper
-    env = gym.vector.VectorEnv | gym.Env | ObservationWrapper
+
+
+@overload
+def build_env(env_id: str | _EnvSpec, n_env: Literal[0, 1], view_size: int = 3) -> "gym.Env": ...  # pyright: ignore[reportOverlappingOverload]
+
+
+@overload
+def build_env(env_id: str | _EnvSpec, n_env: int, view_size: int = 3) -> "gym.vector.VectorEnv": ...
+
+
+def build_env(env_id: str | _EnvSpec, n_env, view_size=3) -> "gym.vector.VectorEnv | gym.Env":
+    env: gym.vector.VectorEnv | gym.Env
     if n_env > 1:
         env = _make_env(env_id)
     else:
@@ -453,18 +476,19 @@ class ObservationActionBuffer:
     actions: jnp.ndarray
 
 
-def convert_to_discrete_tree(params, action_type, temperature=1.0):
+def convert_to_discrete_tree(params: Mapping, action_type: str, temperature: float = 1.0) -> Mapping[str, Any]:
     """
     Convert a trained soft decision tree (SDT) into a discrete decision tree.
 
     Args:
         params (dict): The parameters of the trained SDT.
+        temperature (float): The temperature parameter for the entmax activation function.
 
     Returns:
         dict: The parameters of the discrete decision tree.
     """
     # Create a deep copy of the parameters to avoid modifying the original parameters
-    new_params = unfreeze(copy.deepcopy(params))
+    new_params = unfreeze(copy.deepcopy(params))  # type: ignore
 
     beta = new_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["kernel"]
     beta = entmax15JAX(beta.T / temperature).T

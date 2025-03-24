@@ -51,7 +51,6 @@ from utils import (
 
 if TYPE_CHECKING:
     import chex
-    from sklearn.tree import BaseDecisionTree
     from numpy.typing import NDArray
 
 # os.environ['MUJOCO_GL'] = 'egl'
@@ -74,7 +73,6 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
     print("CUDA_VISIBLE_DEVICES", os.environ["CUDA_VISIBLE_DEVICES"])
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-
     if trial is not None:
         timestamp = "TRIAL_NO" + str(trial.number) + "_" + timestamp
 
@@ -466,9 +464,9 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                     values=storage.values.at[step].set(value.squeeze()),
                 )
             else:
-                breakpoint()
+                # result: layer_output, log_std
                 result = actor.apply(actor_state.params, next_obs, indices=actor_state.indices)
-                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
+                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # pyright: ignore[reportArgumentType]
 
                 value: jax.Array = critic.apply(critic_state.params, next_obs)  # pyright: ignore[reportAssignmentType]
 
@@ -507,7 +505,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                 entropy = action_distribution.entropy()
             else:
                 result = actor.apply(actor_state_params, x, indices=actor_state.indices)
-                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
+                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # pyright: ignore[reportArgumentType]
 
                 value = critic.apply(critic_state_params, x).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
                 logprob = action_distribution.log_prob(action)
@@ -533,9 +531,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
             next_done: np.ndarray,
             storage: Storage,
         ):
-            next_value = critic.apply(
-                critic_state.params, next_obs
-            ).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
+            next_value = critic.apply(critic_state.params, next_obs).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
 
             advantages = jnp.zeros((args.n_envs,))
             dones = jnp.concatenate([storage.dones, next_done[None, :]], axis=0)
@@ -575,15 +571,15 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
 
         @jax.jit
         def update_ppo(
-            actor_state: TrainState,
+            actor_state: ActorTrainState,
             critic_state: TrainState,
             storage: Storage,
             key: chex.PRNGKey,
             accumulate_gradients_every: int,
         ) -> tuple[
-            TrainState, TrainState, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, chex.PRNGKey
+            ActorTrainState, TrainState, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, chex.PRNGKey
         ]:
-            def update_epoch(carry: tuple[TrainState, TrainState, chex.PRNGKey], unused_inp):
+            def update_epoch(carry: tuple[ActorTrainState, TrainState, chex.PRNGKey], unused_inp):
                 actor_state, critic_state, key = carry
                 key, subkey = jax.random.split(key)
 
@@ -601,8 +597,10 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                 flatten_storage = jax.tree_map(flatten, storage)
                 shuffled_storage = jax.tree_map(convert_data, flatten_storage)
 
-                def update_minibatch(carry: tuple[TrainState, TrainState], minibatch: Storage) -> tuple[
-                    tuple[TrainState, TrainState],
+                def update_minibatch(
+                    carry: tuple[ActorTrainState, TrainState], minibatch: Storage
+                ) -> tuple[
+                    tuple[ActorTrainState, TrainState],
                     tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, Any],
                 ]:
                     actor_state, critic_state = carry
@@ -619,7 +617,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                     )
                     critic_state: TrainState = critic_state.apply_gradients(grads=critic_grads)
                     actor_grad_accum = jax.tree_util.tree_map(lambda x, y: x + y, actor_grads, actor_state.grad_accum)
-                    actor_state: TrainState = actor_state.apply_gradients(grads=actor_grads)
+                    actor_state: ActorTrainState = actor_state.apply_gradients(grads=actor_grads)
 
                     def update_fn():
                         grads = jax.tree_util.tree_map(lambda x: x / accumulate_gradients_every, actor_grad_accum)
@@ -678,7 +676,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                 ActorTrainState,
                 EpisodeStatistics,
                 np.ndarray,
-                NDArray[np.bool_],
+                NDArray[np.bool_] | bool,
                 Storage,
                 chex.PRNGKey,
                 int,
@@ -811,7 +809,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
 
                 def fit_stateActionDT(
                     actor_state: ActorTrainState, env_id: str, n_episodes: int, name_appendix, seed: int = 1_000
-                ):
+                ) -> DecisionTreeClassifier | DecisionTreeRegressor | list[DecisionTreeRegressor]:
                     assert envs.single_observation_space.shape is not None
                     assert envs.single_action_space.shape is not None
                     action_obs_store = ObservationActionBuffer(
@@ -833,19 +831,20 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             actor_params = actor_state.params
 
                             if args.action_type == "discrete":
-                                breakpoint()
-                                action_logits = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
+                                action_logits = cast(
+                                    "jax.Array", actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
+                                )
                                 action = jnp.argmax(action_logits, axis=1)
                                 action = jnp.squeeze(
                                     action, axis=0
                                 )  # jnp.squeeze(action, axis=0) if action.shape[0] == 1 else action #action[0]
                             else:
                                 result = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
-                                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
+                                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # pyright: ignore[reportArgumentType]
                                 action = action_distribution.mean()
                                 action = jnp.squeeze(action, axis=0)
 
-                            action_obs_store = action_obs_store.replace(
+                            action_obs_store = action_obs_store.replace(  # type: ignore[attr-defined]
                                 obs=storage.obs.at[total_eval_steps].set(obs),
                                 actions=storage.actions.at[total_eval_steps].set(action),
                             )
@@ -872,8 +871,9 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                         temp_env.close()
 
                     # Initialize decision tree
+                    decision_tree: DecisionTreeClassifier | DecisionTreeRegressor | list[DecisionTreeRegressor]
                     if args.action_type == "discrete":
-                        decision_tree: BaseDecisionTree = DecisionTreeClassifier(max_depth=args.depth)
+                        decision_tree = DecisionTreeClassifier(max_depth=args.depth)
                     else:  # noqa
                         if action_dim == 1:
                             decision_tree = DecisionTreeRegressor(max_depth=args.depth)
@@ -885,11 +885,11 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
 
                     if args.action_type == "discrete" or action_dim == 1:
                         y = np.array(action_obs_store.actions).reshape(-1)
-                        decision_tree.fit(X, y)
+                        decision_tree.fit(X, y)  # type: ignore[attr-defined]
                     else:
                         for i in range(action_dim):
                             y = np.array(action_obs_store.actions).reshape(-1, action_dim)
-                            decision_tree[i].fit(X, y[:, i])
+                            decision_tree[i].fit(X, y[:, i])  # pyright: ignore[reportIndexIssue]
 
                     return decision_tree
 
@@ -899,8 +899,10 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                     n_episodes: int,
                     name_appendix: str,
                     seed: int = 100,
-                    decision_tree: Optional[BaseDecisionTree]=None,
-                ) -> tuple[list[int], list[int], int]:
+                    decision_tree: Optional[
+                        DecisionTreeClassifier | DecisionTreeRegressor | list[DecisionTreeRegressor]
+                    ] = None,
+                ) -> tuple[list[float], list[float], int]:
                     video_folder = "videos/wandb"
                     if not os.path.exists(video_folder):
                         os.makedirs(video_folder)
@@ -929,7 +931,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             step_counter = 0
                             while not done and not trunc:
                                 if args.render_env and render_now:
-                                    frame = temp_env.render()
+                                    frame = cast("NDArray", temp_env.render())
 
                                     image = Image.fromarray(frame)
                                     draw = ImageDraw.Draw(image)
@@ -952,16 +954,17 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                     frames.append(np.array(image))
 
                                 flat_obs = obs.reshape(1, -1)
+                                assert decision_tree is not None
                                 if args.action_type == "discrete":
-                                    decision_tree = cast("BaseDecisionTree", decision_tree)
+                                    decision_tree = cast("DecisionTreeClassifier | DecisionTreeRegressor", decision_tree)  # noqa: E501
                                     action = decision_tree.predict(flat_obs)[0]
                                 else:  # noqa
                                     if action_dim == 1:
-                                        action = decision_tree.predict(flat_obs)
+                                        action = decision_tree.predict(flat_obs)  # type: ignore[attr-defined]
                                     else:
                                         action_list = []
                                         for i in range(action_dim):
-                                            action_by_tree = decision_tree[i].predict(flat_obs)[0]
+                                            action_by_tree = decision_tree[i].predict(flat_obs)[0]  # pyright: ignore[reportIndexIssue]
                                             action_list.append(action_by_tree)
                                         action = np.array(action_list)
 
@@ -979,12 +982,13 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                     action = action_indices[action]
                                 next_obs, rewards, done, trunc, info = temp_env.step(action)
 
-                                running_reward += rewards
+                                running_reward += rewards  # type: ignore[operator]
 
                                 obs = next_obs
                                 step_counter += 1
 
                             score_interpretable.append(running_reward)
+
                             if args.render_env and render_now:
                                 if False:
                                     frame = temp_env.render()
@@ -1025,6 +1029,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
 
                                 if episode_index == 0:
                                     if args.action_type == "discrete" or action_dim == 1:
+                                        decision_tree = cast("DecisionTreeClassifier | DecisionTreeRegressor", decision_tree)  # noqa: E501
                                         # Plot the decision tree
                                         plt.figure(figsize=(20, 10))
                                         plot_tree(decision_tree, filled=True)
@@ -1040,6 +1045,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                         node_count += decision_tree.tree_.node_count
                                     else:
                                         node_count = 0
+                                        decision_tree = cast("list[DecisionTreeRegressor]", decision_tree)
                                         for i in range(action_dim):
                                             # Plot the decision tree
                                             plt.figure(figsize=(20, 10))
@@ -1069,13 +1075,13 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
 
                             done, trunc = False, False
                             obs, info = temp_env.reset(seed=seed + episode_index)  # random.randint(0, 1000))
-                            running_reward = 0
+                            running_reward = 0.0
                             frames = []
                             dones = False
                             step_counter = 0
                             while not done and not trunc:
                                 if args.render_env and render_now:
-                                    frame = temp_env.render()
+                                    frame = cast("NDArray", temp_env.render())
 
                                     image = Image.fromarray(frame)
                                     draw = ImageDraw.Draw(image)
@@ -1121,7 +1127,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                         indices=actor_state.indices,
                                     )
 
-                                    action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
+                                    action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # type: ignore
                                     action = action_distribution.mean()
                                     action = jnp.squeeze(action, axis=0)
 
@@ -1141,7 +1147,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                     action = action_indices[action]
                                 next_obs, rewards, done, trunc, info = temp_env.step(action)
 
-                                running_reward += rewards
+                                running_reward += rewards  # type: ignore[operator]
 
                                 obs = next_obs
                                 step_counter += 1
@@ -1187,12 +1193,12 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                 if episode_index == 0:
                                     split_values = actor_params_discrete["params"]["SDT_0"]["inner_nodes"]["layers_0"][
                                         "kernel"
-                                    ].T * jnp.expand_dims(
+                                    ].T * jnp.expand_dims(  # pyright: ignore[reportAttributeAccessIssue]
                                         actor_params_discrete["params"]["SDT_0"]["inner_nodes"]["layers_0"]["bias"], 1
                                     )
                                     split_indices = actor_params_discrete["params"]["SDT_0"]["inner_nodes"]["layers_0"][
                                         "kernel"
-                                    ].T
+                                    ].T  # pyright: ignore[reportAttributeAccessIssue]
                                     leaf_values = actor_params_discrete["params"]["SDT_0"]["leaf_nodes"]["kernel"]
 
                                     image_path, node_count = plot_decision_tree(
@@ -1267,7 +1273,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                         step_counter = 0
                         while not done and not trunc:
                             if args.render_env and render_now:
-                                frame = temp_env.render()
+                                frame = cast("NDArray", temp_env.render())
 
                                 image = Image.fromarray(frame)
                                 draw = ImageDraw.Draw(image)
@@ -1293,13 +1299,13 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             if args.action_type == "discrete":
                                 action_logits = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
 
-                                action = jnp.argmax(action_logits, axis=1)
+                                action = jnp.argmax(action_logits, axis=1)  # type: ignore[arg-type]
                                 action = jnp.squeeze(
                                     action, axis=0
                                 )  # jnp.squeeze(action, axis=0) if action.shape[0] == 1 else action #action[0]
                             else:
                                 result = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
-                                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))
+                                action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # pyright: ignore[reportIndexIssue, reportArgumentType]
                                 action = action_distribution.mean()
                                 action = jnp.squeeze(action, axis=0)
 
@@ -1319,7 +1325,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                 action = action_indices[action]
                             next_obs, rewards, done, trunc, info = temp_env.step(action)
 
-                            running_reward += rewards
+                            running_reward += rewards  # type: ignore[operator]
 
                             obs = next_obs
                             step_counter += 1
@@ -1363,6 +1369,8 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                     # wandb_log["gameplay_" + name_appendix + '_trial' + str(episode_index)] = wandb.Video(numpy_clip, fps=fps, format="mp4")
 
                             if args.n_estimators <= 5 and args.actor == "sympol" and episode_index == 0:
+                                if TYPE_CHECKING:
+                                    actor_params = cast("dict[str, Any]", actor_params)  # pyright: ignore[reportPossiblyUnboundVariable]
                                 for estimator_number in range(args.n_estimators):
                                     filename_appendix = "_" + str(estimator_number)
                                     image_path, node_count = plot_decision_tree(
@@ -1391,7 +1399,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                             + "_trial"
                                             + str(episode_index)
                                             + "_estNumber"
-                                            + str(estimator_number): wandb.Image(image_path_plot)
+                                            + str(estimator_number): wandb.Image(image_path_plot)  # pyright: ignore[reportPossiblyUnboundVariable]
                                         },
                                         commit=False,
                                     )
@@ -1430,7 +1438,7 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                 )
                             elif (args.actor == "sdt" or args.actor == "d-sdt") and episode_index == 0:
                                 split_values = actor_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["bias"]
-                                split_indices = actor_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["kernel"].T
+                                split_indices = actor_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["kernel"].T  # type: ignore[attr-defined]
                                 leaf_values = actor_params["params"]["SDT_0"]["leaf_nodes"]["kernel"]
 
                                 image_path, node_count_sdt = plot_decision_tree_soft(
@@ -1494,6 +1502,9 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                         updates=actor_state.params, state=lr_scheduler_state, value=avg_score
                     )
                     # [-1] is the adamw optimizer, while [0] would be the gradient clipping of the tx.chain
+                    if TYPE_CHECKING:
+                        lr_scheduler_state = cast(optax.contrib.ReduceLROnPlateauState, lr_scheduler_state)
+                        actor_state.opt_state = cast(tuple[tuple[Any, ...] | tuple[()], Any], actor_state.opt_state)
                     if args.actor != "sympol":
                         actor_state.opt_state[1].hyperparams["learning_rate"] = (
                             learning_rate_actor * lr_scheduler_state.scale
