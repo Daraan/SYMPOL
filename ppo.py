@@ -53,6 +53,8 @@ if TYPE_CHECKING:
     import chex
     from numpy.typing import NDArray
 
+    from config_types.args_types import CLIArgs
+
 # os.environ['MUJOCO_GL'] = 'egl'
 
 
@@ -66,7 +68,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "0"
 # os.environ["TF_CUDNN DETERMINISTIC"] = "1"
 
 
-def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[multiprocessing.Queue] = None):
+def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Optional[multiprocessing.Queue] = None):
     start_time = time.time()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_number)
@@ -311,16 +313,16 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             optax.multi_transform(
                                 {
                                     "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_weights
+                                        args.learning_rate_actor_weights
                                     ),
                                     "split_values": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_split_values
+                                        args.learning_rate_actor_split_values
                                     ),
                                     "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_split_idx_array
+                                        args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adam)(learning_rate_actor_leaf_array),
-                                    "log_std": optax.inject_hyperparams(optax.adam)(learning_rate_actor_log_std),
+                                    "leaf_array": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_leaf_array),
+                                    "log_std": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
                             ),
@@ -369,16 +371,16 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             optax.multi_transform(
                                 {
                                     "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_weights
+                                        args.learning_rate_actor_weights
                                     ),
                                     "split_values": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_split_values
+                                        args.learning_rate_actor_split_values
                                     ),
                                     "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_split_idx_array
+                                        args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adam)(learning_rate_actor_leaf_array),
-                                    "log_std": optax.inject_hyperparams(optax.adam)(learning_rate_actor_log_std),
+                                    "leaf_array": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_leaf_array),
+                                    "log_std": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
                             ),
