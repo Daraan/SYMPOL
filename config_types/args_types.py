@@ -7,16 +7,6 @@ if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
 
-class _NoAttribute:
-    def __init__(self, name):
-        self.name = name
-
-    def __get__(self, instance, owner):
-        raise AttributeError(
-            f"Do use the no- attribute {self.name} directly use the corresponding attribute without the no_ prefix"
-        )
-
-
 class _HandleNos:
     def __post_init__(self: "DataclassInstance"):
         """Convert no_ arguments to their inverse without prefix"""
@@ -27,7 +17,6 @@ class _HandleNos:
                 setattr(self, key[3:], not value)
                 # NOTE: This might cause errors if a second parser is created.
                 delattr(self, key)
-                setattr(self.__class__, key, _NoAttribute(key))  # need to be on class for descriptor to work
 
 
 @dataclass(kw_only=True)
