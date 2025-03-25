@@ -1,5 +1,6 @@
-from dataclasses import dataclass, fields
-from typing import Optional, TYPE_CHECKING, Literal
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING, Literal, Optional
+
 from typing_extensions import TypeGuard
 
 if TYPE_CHECKING:
@@ -24,7 +25,9 @@ class _HandleNos:
             value = getattr(self, key)
             if key.startswith("no_") and value is not None:
                 setattr(self, key[3:], not value)
-                setattr(self, key, _NoAttribute(key))
+                # NOTE: This might cause errors if a second parser is created.
+                delattr(self, key)
+                setattr(self.__class__, key, _NoAttribute(key))  # need to be on class for descriptor to work
 
 
 @dataclass(kw_only=True)
@@ -67,7 +70,7 @@ class Args(_HandleNos):
     """If true, render environments each time there is an evaluation"""
     overwrite_explicit: bool = False
     """Whether to overwrite explicit arguments"""
-    no_adamW: bool = True
+    no_adamW: bool = field(default=True, repr=False)
     """Do not use AdamW optimizer (explicitly sets to False)"""
     adamW: bool = False
     """Whether to use AdamW optimizer"""
@@ -85,11 +88,11 @@ class Args(_HandleNos):
     """Path to save checkpoints"""
     render_each_eval: bool = False
     """If true, render environments each time there is an evaluation"""
-    no_render_env: bool = False
+    no_render_env: bool = field(default=True, repr=False)
     """Flag to disable rendering of the environment"""
     render_env: bool = True
     """Whether to render the environment"""
-    no_reduce_lr: bool = False
+    no_reduce_lr: bool = field(default=True, repr=False)
     """Flag to not use reduce_lr"""
     reduce_lr: bool = True
     """Whether to use reduce_lr"""
