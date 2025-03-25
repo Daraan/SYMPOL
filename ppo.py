@@ -512,7 +512,12 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
 
             return logprob, entropy, value
 
-        def _compute_gae_once(carry, inp, gamma, gae_lambda):
+        def _compute_gae_once(
+            carry,
+            inp: tuple[jax.Array | float, jax.Array | float, jax.Array | float, jax.Array | float],
+            gamma,
+            gae_lambda,
+        ):
             advantages = carry
             nextdone, nextvalues, curvalues, reward = inp
             nextnonterminal = 1.0 - nextdone
@@ -660,8 +665,8 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
             )
             return actor_state, critic_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key
 
-        def create_rollout(n_steps: int, envs: "gym.Env | gym.vector.VectorEnv"):
-
+        # This function is slow to type-check when annotated
+        def create_rollout(n_steps: int, envs: gym.vector.VectorEnv):
             def rollout_(
                 actor_state: ActorTrainState,
                 critic_state: ActorTrainState,
