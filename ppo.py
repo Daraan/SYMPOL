@@ -149,8 +149,10 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
 
         group_name = run_name
         run_name = run_name + "_" + str(random_trial_number)
-
-        envs: gym.vector.VectorEnv = build_env(args.env_id, n_env=args.n_envs, view_size=args.view_size)
+        envs = build_env(args.env_id, n_env=args.n_envs, view_size=args.view_size)
+        if args.n_envs <= 1:
+            # Need a VectorEnv for the attributes used below
+            envs = cast("gym.vector.VectorEnv", gym.vector.AsyncVectorEnv([lambda e=envs: e]))
 
         obs_dim = envs.single_observation_space.shape[-1]  # type: ignore
 
@@ -529,7 +531,8 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
             storage: Storage,
         ):
             next_value = critic.apply(critic_state.params, next_obs).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
-
+            if args.n_envs <= 1:  # add batch dimension
+                next_value = next_value[None]
             advantages = jnp.zeros((args.n_envs,))
             dones = jnp.concatenate([storage.dones, next_done[None, :]], axis=0)
             values = jnp.concatenate([storage.values, next_value[None, :]], axis=0)
