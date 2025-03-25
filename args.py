@@ -7,13 +7,13 @@ from config_types.args_types import CLIArgs
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.explicit_args = set()
+        self._explicit_args = set()
 
     def parse_known_args(self, args=None, namespace=None):
         if args is None:
             args = sys.argv[1:]
         namespace, remaining_args = super().parse_known_args(args, namespace)
-        self.explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
+        self._explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
         return namespace, remaining_args
 
     def parse_args(self, args=None, namespace=None):
@@ -22,6 +22,9 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
             msg = "unrecognized arguments: %s"
             self.error(msg % " ".join(remaining_args))
         return namespace
+
+    def get_explicit_args(self) -> set[str]:
+        return self._explicit_args
 
 
 def get_args() -> CLIArgs:
@@ -292,7 +295,7 @@ def get_args() -> CLIArgs:
 
     args = parser.parse_args()
     explicit_args_corrected = []
-    for some_arg in parser.explicit_args:
+    for some_arg in parser.get_explicit_args():
         if "no-" in some_arg:
             explicit_args_corrected.append("".join(some_arg.split("no-")))
         else:
