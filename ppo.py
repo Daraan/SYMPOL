@@ -1079,6 +1079,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                             frames = []
                             dones = False
                             step_counter = 0
+                            # Prevent unbound variable
+                            actor_params_discrete = {}
+                            actor_params = {}
                             while not done and not trunc:
                                 if args.render_env and render_now:
                                     frame = cast("NDArray", temp_env.render())
@@ -1511,9 +1514,6 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                             args.learning_rate_actor * lr_scheduler_state.scale
                         )
                     else:
-                        if TYPE_CHECKING:
-                            actor_state.opt_state = cast(tuple, actor_state.opt_state)
-                            reveal_type(actor_state.opt_state)
                         actor_state.opt_state[1][0]["estimator_weights"][0].hyperparams["learning_rate"] = (
                             args.learning_rate_actor_weights * lr_scheduler_state.scale
                         )
