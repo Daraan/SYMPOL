@@ -439,7 +439,7 @@ def build_env(env_id: str | _EnvSpec, n_env, view_size=3) -> "gym.vector.VectorE
 
     if n_env > 1:
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env_to_return = gym.vector.AsyncVectorEnv([lambda: env for _ in range(n_env)])  # type: ignore[arg-type]
+        env_to_return = gym.vector.AsyncVectorEnv([lambda env=env: env for _ in range(n_env)])  # type: ignore[arg-type]
     else:
         env_to_return = env
     return env_to_return
