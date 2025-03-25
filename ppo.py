@@ -261,11 +261,6 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
             )
 
         if args.actor == "sympol":
-            learning_rate_actor_weights = args.learning_rate_actor_weights
-            learning_rate_actor_split_values = args.learning_rate_actor_split_values
-            learning_rate_actor_split_idx_array = args.learning_rate_actor_split_idx_array
-            learning_rate_actor_leaf_array = args.learning_rate_actor_leaf_array
-            learning_rate_actor_log_std = args.learning_rate_actor_log_std
 
             def map_nested_fn(fn):
                 """Recursively apply `fn` to key-value pairs of a nested dict."""
@@ -287,16 +282,16 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                             optax.multi_transform(
                                 {
                                     "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_weights
+                                        args.learning_rate_actor_weights
                                     ),
                                     "split_values": optax.inject_hyperparams(optax.adam)(
-                                        learning_rate_actor_split_values
+                                        args.learning_rate_actor_split_values
                                     ),
                                     "split_idx_array": optax.inject_hyperparams(optax.adamw)(
-                                        learning_rate_actor_split_idx_array
+                                        args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(learning_rate_actor_leaf_array),
-                                    "log_std": optax.inject_hyperparams(optax.adamw)(learning_rate_actor_log_std),
+                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor_leaf_array),
+                                    "log_std": optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
                             ),
@@ -1508,26 +1503,26 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                         actor_state.opt_state = cast(tuple[tuple[Any, ...] | tuple[()], Any], actor_state.opt_state)
                     if args.actor != "sympol":
                         actor_state.opt_state[1].hyperparams["learning_rate"] = (
-                            learning_rate_actor * lr_scheduler_state.scale
+                            args.learning_rate_actor * lr_scheduler_state.scale
                         )
                     else:
                         if TYPE_CHECKING:
                             actor_state.opt_state = cast(tuple, actor_state.opt_state)
                             reveal_type(actor_state.opt_state)
                         actor_state.opt_state[1][0]["estimator_weights"][0].hyperparams["learning_rate"] = (
-                            learning_rate_actor_weights * lr_scheduler_state.scale
+                            args.learning_rate_actor_weights * lr_scheduler_state.scale
                         )
                         actor_state.opt_state[1][0]["split_values"][0].hyperparams["learning_rate"] = (
-                            learning_rate_actor_split_values * lr_scheduler_state.scale
+                            args.learning_rate_actor_split_values * lr_scheduler_state.scale
                         )
                         actor_state.opt_state[1][0]["split_idx_array"][0].hyperparams["learning_rate"] = (
-                            learning_rate_actor_split_idx_array * lr_scheduler_state.scale
+                            args.learning_rate_actor_split_idx_array * lr_scheduler_state.scale
                         )
                         actor_state.opt_state[1][0]["leaf_array"][0].hyperparams["learning_rate"] = (
-                            learning_rate_actor_leaf_array * lr_scheduler_state.scale
+                            args.learning_rate_actor_leaf_array * lr_scheduler_state.scale
                         )
                         actor_state.opt_state[1][0]["log_std"][0].hyperparams["learning_rate"] = (
-                            learning_rate_actor_log_std * lr_scheduler_state.scale
+                            args.learning_rate_actor_log_std * lr_scheduler_state.scale
                         )
 
                 end_time = time.time()
