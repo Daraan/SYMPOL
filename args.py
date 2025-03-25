@@ -27,7 +27,13 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         return self._explicit_args
 
 
-def get_args() -> CLIArgs:
+# Circular import needs ArgumentParserWithDefaults to be defined first
+from rllib_port.extended_args import SympolArgumentParser, DefaultArgumentParser  # noqa: E402
+
+def get_args():
+    return SympolArgumentParser().parse_args()
+
+def get_args_old() -> CLIArgs:
     parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
     parser.add_argument(

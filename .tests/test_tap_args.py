@@ -363,3 +363,40 @@ def get_args() -> CLIArgs:
         )
 
     return CLIArgs(**vars(args))
+
+
+def test_args_old_vs_new():
+    from args import get_args, get_args_old
+
+    new_args = get_args()
+    old_args = get_args_old()
+
+    from tap import Tap
+
+    for attr in (
+        a
+        for a in (set(dir(old_args)) | set(dir(new_args))) - set(dir(Tap()))
+        if not (a == "get_explicit_args" or a.startswith(("_", "no_")))
+    ):
+        assert getattr(old_args, attr) == getattr(
+            new_args, attr
+        ), f"Attribute {attr} differs. {getattr(old_args, attr)} != {getattr(new_args, attr)}"
+
+    from config_types.args_types import CLIArgs, PPOArgs, Args, GeneralArgs, SYMPOLArgs
+
+    dc = CLIArgs()
+    attrs = (
+        set(vars(dc).keys())
+        | PPOArgs.__dataclass_fields__.keys()
+        | GeneralArgs.__dataclass_fields__.keys()
+        | SYMPOLArgs.__dataclass_fields__.keys()
+        | Args.__dataclass_fields__.keys()
+        | set(vars(old_args).keys())
+    )
+    attrs = {a for a in attrs if not (a.startswith("_") or a.startswith("no_"))}
+    for attr in attrs:
+        assert hasattr(old_args, attr), f"Attribute {attr} is missing in args"
+        assert hasattr(dc, attr), f"Attribute {attr} is missing in CLIArgs"
+        assert getattr(old_args, attr) == getattr(
+            dc, attr
+        ), f"Attribute {attr} is different in args and CLIArgs, {getattr(old_args, attr)} != {getattr(dc, attr)}"

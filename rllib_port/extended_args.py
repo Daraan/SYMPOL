@@ -1,16 +1,22 @@
 import logging
+from typing import Literal
+from typing_extensions import Self
 
-from tap import Tap
 
 from args import ArgumentParserWithDefaults, CLIArgs
+from ray_utilities.config.typed_argument_parser import DefaultArgumentParser
 
 logger = logging.getLogger(__name__)
 
 
-class SympolArgumentParser(ArgumentParserWithDefaults, Tap, CLIArgs):
+class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CLIArgs):
+    # Make Non-Required
+    agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
+    """Sync with args.actor"""
+
     # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
-    def parse_args(self, args=None, *, known_only=False, **kwargs) -> CLIArgs:
-        return Tap.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
+    def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
+        return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
         self.add_argument(
@@ -36,6 +42,19 @@ class SympolArgumentParser(ArgumentParserWithDefaults, Tap, CLIArgs):
         )
 
     def process_args(self) -> None:
+        self._process_args_sympol()
+        self._process_args_ray_utilities()
+
+    def _process_args_ray_utilities(self) -> None:
+        """Make CLIArgs compatible with DefaultArgumentParser"""
+        self.episodes = self.total_steps
+        self.env_type = self.env_id
+        self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
+        self.render_mode = "rgb_array" if self.render_env else None
+        self.wandb = "offline+upload" if self.track else False
+        self.comet = "offline+upload" if self.track else False
+
+    def _process_args_sympol(self) -> None:
         explicit_args_corrected = []
         for some_arg in self._explicit_args:
             if "no-" in some_arg:
