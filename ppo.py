@@ -294,7 +294,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                     "split_idx_array": optax.inject_hyperparams(optax.adamw)(
                                         args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor_leaf_array),
+                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(
+                                        args.learning_rate_actor_leaf_array
+                                    ),
                                     "log_std": optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
@@ -323,7 +325,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                     "split_idx_array": optax.inject_hyperparams(optax.adam)(
                                         args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_leaf_array),
+                                    "leaf_array": optax.inject_hyperparams(optax.adam)(
+                                        args.learning_rate_actor_leaf_array
+                                    ),
                                     "log_std": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
@@ -381,7 +385,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                     "split_idx_array": optax.inject_hyperparams(optax.adam)(
                                         args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_leaf_array),
+                                    "leaf_array": optax.inject_hyperparams(optax.adam)(
+                                        args.learning_rate_actor_leaf_array
+                                    ),
                                     "log_std": optax.inject_hyperparams(optax.adam)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
@@ -961,7 +967,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                 flat_obs = obs.reshape(1, -1)
                                 assert decision_tree is not None
                                 if args.action_type == "discrete":
-                                    decision_tree = cast("DecisionTreeClassifier | DecisionTreeRegressor", decision_tree)  # noqa: E501
+                                    decision_tree = cast(
+                                        "DecisionTreeClassifier | DecisionTreeRegressor", decision_tree
+                                    )  # noqa: E501
                                     action = decision_tree.predict(flat_obs)[0]
                                 else:  # noqa
                                     if action_dim == 1:
@@ -1034,7 +1042,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
 
                                 if episode_index == 0:
                                     if args.action_type == "discrete" or action_dim == 1:
-                                        decision_tree = cast("DecisionTreeClassifier | DecisionTreeRegressor", decision_tree)  # noqa: E501
+                                        decision_tree = cast(
+                                            "DecisionTreeClassifier | DecisionTreeRegressor", decision_tree
+                                        )  # noqa: E501
                                         # Plot the decision tree
                                         plt.figure(figsize=(20, 10))
                                         plot_tree(decision_tree, filled=True)

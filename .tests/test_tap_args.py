@@ -378,9 +378,9 @@ def test_args_old_vs_new():
         for a in (set(dir(old_args)) | set(dir(new_args))) - set(dir(Tap()))
         if not (a == "get_explicit_args" or a.startswith(("_", "no_")))
     ):
-        assert getattr(old_args, attr) == getattr(
-            new_args, attr
-        ), f"Attribute {attr} differs. {getattr(old_args, attr)} != {getattr(new_args, attr)}"
+        assert getattr(old_args, attr) == getattr(new_args, attr), (
+            f"Attribute {attr} differs. {getattr(old_args, attr)} != {getattr(new_args, attr)}"
+        )
 
     from config_types.args_types import CLIArgs, PPOArgs, Args, GeneralArgs, SYMPOLArgs
 
@@ -397,6 +397,6 @@ def test_args_old_vs_new():
     for attr in attrs:
         assert hasattr(old_args, attr), f"Attribute {attr} is missing in args"
         assert hasattr(dc, attr), f"Attribute {attr} is missing in CLIArgs"
-        assert getattr(old_args, attr) == getattr(
-            dc, attr
-        ), f"Attribute {attr} is different in args and CLIArgs, {getattr(old_args, attr)} != {getattr(dc, attr)}"
+        assert getattr(old_args, attr) == getattr(dc, attr), (
+            f"Attribute {attr} is different in args and CLIArgs, {getattr(old_args, attr)} != {getattr(dc, attr)}"
+        )
