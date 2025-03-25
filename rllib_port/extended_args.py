@@ -1,11 +1,11 @@
 import logging
 
 from tap import Tap
-from typing_extensions import Self
 
 from args import ArgumentParserWithDefaults, CLIArgs
 
 logger = logging.getLogger(__name__)
+
 
 class SympolArgumentParser(ArgumentParserWithDefaults, Tap, CLIArgs):
     # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
