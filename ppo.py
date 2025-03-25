@@ -1424,18 +1424,19 @@ def train_agent(args, trial: Optional[optuna.Trial] = None, queue: Optional[mult
                                         continuous=args.action_type != "discrete",
                                     )
 
-                                image_path_plot = image_path_complete + ".png"
-                                wandb.log(
-                                    {
-                                        "DT_COMPLETE"
-                                        + name_appendix
-                                        + "_trial"
-                                        + str(episode_index)
-                                        + "_estNumber"
-                                        + str(estimator_number): wandb.Image(image_path_plot)
-                                    },
-                                    commit=False,
-                                )
+                                image_path_plot = image_path_complete + ".png"  # type: ignore
+                                if args.track:
+                                    wandb.log(
+                                        {
+                                            "DT_COMPLETE"
+                                            + name_appendix
+                                            + "_trial"
+                                            + str(episode_index)
+                                            + "_estNumber"
+                                            + str(estimator_number): wandb.Image(image_path_plot)  # pyright: ignore[reportPossiblyUnboundVariable]
+                                        },
+                                        commit=False,
+                                    )
                             elif (args.actor == "sdt" or args.actor == "d-sdt") and episode_index == 0:
                                 split_values = actor_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["bias"]
                                 split_indices = actor_params["params"]["SDT_0"]["inner_nodes"]["layers_0"]["kernel"].T  # type: ignore[attr-defined]
