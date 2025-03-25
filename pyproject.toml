@@ -99,6 +99,7 @@ exclude = [
   ]
 
 [tool.ruff.lint.isort]
+known-first-party = ["ray_utilities"]
 force-single-line = false  # default: false
 
 [tool.ruff.lint.pyflakes]
@@ -106,13 +107,15 @@ force-single-line = false  # default: false
 extend-generics = ["ray_utilities.config.experiment_base.ExperimentSetupBase"]
 
 [tool.isort]
+known_first_party = ["ray_utilities"]
 split_on_trailing_comma = true
 include_trailing_comma = true
 profile = "black"
 
 [tool.pyright]
+extraPaths = ["ray_utilities/"]
 reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"
 reportUnnecessaryCast = "warning"
 reportPrivateImportUsage = "warning"
-analyzeUnannotatedFunctions = false
+analyzeUnannotatedFunctions = true
