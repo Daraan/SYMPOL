@@ -672,7 +672,8 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
             return actor_state, critic_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key
 
         # This function is slow to type-check when annotated
-        def create_rollout(n_steps: int, envs: gym.vector.VectorEnv):
+        # def create_rollout(n_steps: int, envs: gym.vector.VectorEnv):
+        def create_rollout(n_steps, envs):
             def rollout_(
                 actor_state: ActorTrainState,
                 critic_state: ActorTrainState,
