@@ -25,8 +25,8 @@ class Actor_MLP(nn.Module):
     neurons_per_layer: int = 256
 
     @nn.compact
-    def __call__(self, obs: jnp.ndarray, **kwargs):
-        for layer in range(self.num_layers):
+    def __call__(self, obs: jnp.ndarray, **kwargs):  # noqa: ARG002
+        for _layer in range(self.num_layers):
             obs = nn.Dense(self.neurons_per_layer)(obs)
             obs = nn.relu(obs)
             obs = nn.Dense(self.action_dim)(obs)
@@ -39,9 +39,9 @@ class Actor_MLP_Continuous(nn.Module):
     neurons_per_layer: int = 256
 
     @nn.compact
-    def __call__(self, obs: jnp.ndarray, **kwargs):
+    def __call__(self, obs: jnp.ndarray, **kwargs):  # noqa: ARG002
         x = obs
-        for layer in range(self.num_layers):
+        for _layer in range(self.num_layers):
             x = nn.Dense(self.neurons_per_layer, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
             x = nn.relu(x)
         # mean = nn.Dense(self.action_dim)(x)
