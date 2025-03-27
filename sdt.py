@@ -1,8 +1,13 @@
-from typing import Literal
-import jax.numpy as jnp
+from __future__ import annotations
+
+from typing import Any, Generic, Literal, overload
+
 import flax.linen as nn
-from flax.linen.initializers import normal
 import jax
+import jax.numpy as jnp
+from flax.linen.initializers import normal
+
+from utils import _is_discreteT
 
 
 def temperature_sigmoid(x, temperature=1.0):
@@ -39,7 +44,7 @@ class SubtractiveEntmaxDense(nn.Module):
         return output
 
 
-class SDT(nn.Module):
+class SDT(nn.Module, Generic[_is_discreteT]):
     input_dim: int
     output_dim: int
     depth: int = 3
@@ -69,7 +74,16 @@ class SDT(nn.Module):
             self.leaf_nodes = nn.Dense(self.output_dim, use_bias=False, kernel_init=normal(0.1))
             self.log_std = self.param("log_std", nn.initializers.zeros, (self.output_dim,))
 
-    def __call__(self, x, max_path):
+    @overload
+    def __call__(self: "SDT[Literal[False]]", x, max_path: bool) -> jax.Array: ...
+
+    @overload
+    def __call__(self: "SDT[Literal[True]]", x, max_path: bool) -> list[jax.Array]: ...
+
+    @overload
+    def __call__(self: "SDT[Any]", x, max_path: bool) -> jax.Array | list[jax.Array]: ...
+
+    def __call__(self, x, max_path) -> jax.Array | list[jax.Array] | Any:
         batch_size = x.shape[0]
         # x = self._data_augment(x)
         # inner_nodes = self.inner_nodes
@@ -114,19 +128,34 @@ class Critic_SDT(nn.Module):
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, max_path=False, **kwargs):
-        sdt = SDT(input_dim=x.shape[-1], output_dim=1, depth=self.depth, temperature=self.temperature)
+        sdt: SDT[Literal[False]] = SDT(
+            input_dim=x.shape[-1], output_dim=1, depth=self.depth, temperature=self.temperature
+        )
         return sdt(x, False)  # , **kwargs)
 
 
-class Actor_SDT(nn.Module):
+class Actor_SDT(nn.Module, Generic[_is_discreteT]):
     action_dim: int
     depth: int = 5
     temperature: float = 1.0
     action_type: Literal["discrete", "continuous"] = "discrete"  # "continuous"
 
+    @overload
+    def __call__(
+        self: "Actor_SDT[Literal[False]]", obs: jnp.ndarray, max_path: bool = False, **kwargs
+    ) -> jnp.ndarray: ...
+
+    @overload
+    def __call__(
+        self: "Actor_SDT[Literal[True]]", obs: jnp.ndarray, max_path: bool = False, **kwargs
+    ) -> list[jnp.ndarray]: ...
+
+    @overload
+    def __call__(self, obs: jnp.ndarray, max_path: bool = False, **kwargs) -> jnp.ndarray | list[jnp.ndarray]: ...
+
     @nn.compact
     def __call__(self, obs: jnp.ndarray, max_path=False, **kwargs):
-        sdt = SDT(
+        sdt: SDT[_is_discreteT] = SDT(
             input_dim=obs.shape[-1],
             output_dim=self.action_dim,
             depth=self.depth,

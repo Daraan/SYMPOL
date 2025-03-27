@@ -16,7 +16,6 @@ from typing import (
     Tuple,
     Union,
     cast,
-    Collection,
     overload,
 )
 
@@ -38,13 +37,16 @@ from gymnax.wrappers.purerl import GymnaxWrapper
 from minigrid.core.world_object import Goal
 from minigrid.envs.distshift import DistShiftEnv
 from minigrid.wrappers import OneHotPartialObsWrapper, ViewSizeWrapper
-from typing_extensions import TypeAliasType
+from typing_extensions import TypeAliasType, TypeVar
 
 from sdt import entmax15JAX
 
 if TYPE_CHECKING:
     import chex
     from gymnasium.envs.registration import EnvSpec as _EnvSpec
+
+_is_discreteT = TypeVar("_is_discreteT", bound=bool, default=bool)  # noqa: N816, PYI018
+"""Generic to be used with models classes to better infer their return type depending on the action space"""
 
 OBSERVATION_LABELS = {
     "LunarLander-v2": [
@@ -414,7 +416,9 @@ def _make_env(env_id: str | _EnvSpec, *args, **kwargs):
 
 
 @overload
-def build_env(env_id: str | _EnvSpec, n_env: Literal[0, 1], view_size: int = 3) -> "gym.Env": ...  # pyright: ignore[reportOverlappingOverload]
+def build_env(  # pyright: ignore[reportOverlappingOverload]
+    env_id: str | _EnvSpec, n_env: Literal[0, 1], view_size: int = 3
+) -> "gym.Env": ...
 
 
 @overload
