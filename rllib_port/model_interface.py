@@ -1,9 +1,10 @@
-from rllib_port.mlp.mlp_model import logger
-
+import logging
+from typing import Tuple
 
 import flax.linen as nn
 from ray.rllib.core.models.base import Model
-from typing import Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class FlaxRLInterface(nn.Module, Model):
