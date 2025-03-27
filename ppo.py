@@ -357,8 +357,10 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                     "split_idx_array": optax.inject_hyperparams(optax.adamw)(
                                         args.learning_rate_actor_split_idx_array
                                     ),
-                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(learning_rate_actor_leaf_array),
-                                    "log_std": optax.inject_hyperparams(optax.adamw)(learning_rate_actor_log_std),
+                                    "leaf_array": optax.inject_hyperparams(optax.adamw)(
+                                        args.learning_rate_actor_leaf_array
+                                    ),
+                                    "log_std": optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor_log_std),
                                 },
                                 map_nested_fn(lambda k, _: k),
                             ),

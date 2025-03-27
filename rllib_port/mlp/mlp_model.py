@@ -3,20 +3,20 @@ from typing import TYPE_CHECKING
 
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
 
-from rllib_port.model_interface import FlaxRLInterface
+from rllib_port.model_interface import FlaxRLModel
 
 logger = logging.getLogger(__name__)
 
 
-class ActorMLPModel(Actor_MLP, FlaxRLInterface):
+class ActorMLPModel(Actor_MLP, FlaxRLModel):
     pass
 
 
-class ActorMLPContinuousModel(Actor_MLP_Continuous, FlaxRLInterface):
+class ActorMLPContinuousModel(Actor_MLP_Continuous, FlaxRLModel):
     pass
 
 
-class CriticMLPModel(Critic_MLP, FlaxRLInterface):
+class CriticMLPModel(Critic_MLP, FlaxRLModel):
     pass
 
 

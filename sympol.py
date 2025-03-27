@@ -11,7 +11,7 @@ from flax import struct
 from utils.jax_math import entmax15JAX
 
 
-@struct.dataclass
+@struct.dataclass(kw_only=True, frozen=False)
 class SYMPOL_RL:
     obs_dim: int = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
@@ -81,7 +81,7 @@ class SYMPOL_RL:
             "leaf_array": leaf_classes_array,
             "log_std": log_std,
         }
-
+        breakpoint()
         return params
 
     def init_indices(self, random_key):
@@ -198,5 +198,3 @@ class SYMPOL_RL:
             raise ValueError(f"Invalid action type {self.action_type}")
 
         return result
-
-

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 import jax
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 
 from ray_utilities.dummy_encoder import DummyActorCriticEncoderConfig
+from ray_utilities.jax.catalog.jax_catalog import JaxCatalog
 from rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
 from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
 from rllib_port.sympol.sympol_model import SympolRLModel
@@ -14,7 +16,7 @@ if TYPE_CHECKING:
     import gymnasium as gym
 
 
-class SympolPPOCatalog(PPOCatalog):
+class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
     def __init__(
         self,
         observation_space: gym.Space,
@@ -28,7 +30,11 @@ class SympolPPOCatalog(PPOCatalog):
         )
         self.actor_type: str = self._model_config_dict["actor"]
 
-    def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:
+        self._action_dist_class_fn = functools.partial(
+            self._get_dist_cls_from_action_space, action_space=self.action_space
+        )
+
+    def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:  # noqa: ARG002
         if self.actor_type in ("mlp", "stateActionDT"):
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
@@ -65,7 +71,7 @@ class SympolPPOCatalog(PPOCatalog):
             )  # , temp=1)
 
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for SDT's
-            # TODO:
+            # TODO: set args.accumulate_gradients_every in setup
             self._model_config_dict["accumulate_gradients_every"] = None  # do not accumulate gradients for SDT's
             actor.apply = jax.jit(actor.apply)
         else:

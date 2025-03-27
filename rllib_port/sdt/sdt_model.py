@@ -1,18 +1,18 @@
 import logging
 from typing import TYPE_CHECKING
 
-from rllib_port.model_interface import FlaxRLInterface
+from rllib_port.model_interface import FlaxRLModel
 from sdt import Actor_SDT, Critic_SDT
 from utils import _is_discreteT
 
 logger = logging.getLogger(__name__)
 
 
-class ActorSDTModel(Actor_SDT[_is_discreteT], FlaxRLInterface):
+class ActorSDTModel(Actor_SDT[_is_discreteT], FlaxRLModel):
     pass
 
 
-class CriticSDTModel(Critic_SDT, FlaxRLInterface):
+class CriticSDTModel(Critic_SDT, FlaxRLModel):
     pass
 
 
