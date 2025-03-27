@@ -39,7 +39,7 @@ from minigrid.envs.distshift import DistShiftEnv
 from minigrid.wrappers import OneHotPartialObsWrapper, ViewSizeWrapper
 from typing_extensions import TypeAliasType, TypeVar
 
-from sdt import entmax15JAX
+from utils.jax_math import entmax15JAX
 
 if TYPE_CHECKING:
     import chex
