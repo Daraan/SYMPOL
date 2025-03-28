@@ -75,7 +75,6 @@ def entmax_threshold_and_supportJAX(inputs, axis=-1):
     :param inputs: (entmax1.5 inputs - max) / 2
     :param axis: entmax1.5 outputs will sum to 1 over this axis
     """
-
     with jax.named_scope("entmax_threshold_and_supportJAX"):
         num_outcomes = inputs.shape[axis]
 
@@ -99,7 +98,6 @@ def entmax_threshold_and_supportJAX(inputs, axis=-1):
 
 def entmax15JAX(inputs, axis=-1) -> jnp.ndarray:
     # Implementation taken from: https://github.com/deep-spin/entmax/tree/master/entmax
-
     """
     Entmax 1.5 implementation, heavily inspired by
      * paper: https://arxiv.org/pdf/1905.05702.pdf

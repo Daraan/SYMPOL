@@ -98,13 +98,18 @@ exclude = [
     ".git",
   ]
 
+[tool.ruff.lint.per-file-ignores]
+"utils/jax_math.py" = [
+  "N802" # function name should be snake_case
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["ray_utilities"]
 force-single-line = false  # default: false
 
 [tool.ruff.lint.pyflakes]
 # Avoid F401 error when Generic is not detected
-extend-generics = ["ray_utilities.config.experiment_base.ExperimentSetupBase"]
+extend-generics = ["ray_utilities.config.experiment_base.ExperimentSetupBase", "ray_utilities.config.ExperimentSetupBase"]
 
 [tool.isort]
 known_first_party = ["ray_utilities"]

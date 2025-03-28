@@ -1,0 +1,14 @@
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.11.2
+  hooks:
+    # Run the linter.
+    - id: ruff
+      args: [
+              "--exit-zero",
+              "--exclude", "ppo_gymnax.py,ppo.py,utils/utils.py,utils/__init__.py,tests/*"
+            ]
+    # Run the formatter.
+    - id: ruff-format
+      args: ["-v"]
