@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 from ray_utilities.config import ExperimentSetupBase
 
@@ -9,6 +9,9 @@ from ray_utilities.config.create_algorithm import create_algorithm_config
 from rllib_port.extended_args import SympolArgumentParser
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.sympol.sympol_module import SympolPPOModule
+
+if TYPE_CHECKING:
+    from ray_utilities.typing import TrainableReturnData
 
 
 class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
@@ -35,6 +38,12 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             discrete_eval=False,
         )
         return config
+
+    def create_trainable(self) -> Callable[[dict[str, Any]], TrainableReturnData]:
+        def foo(params):
+            raise NotImplementedError()
+
+        return foo
 
 
 if TYPE_CHECKING:

@@ -3,11 +3,15 @@ import sys
 import unittest
 from unittest import mock
 
-from _test_utils import clean_args, fixed_args
+import jax
+
+import args
+from tests._test_utils import clean_args, fixed_args
 
 from config_types.args_types import CLIArgs
 from rllib_port.sympol.sympol_model import SympolRLModel
 from rllib_port.sympol.sympol_module import SympolPPOModule
+from sympol import SYMPOL_RL
 
 
 @clean_args
@@ -20,7 +24,6 @@ class TestModule(unittest.TestCase):
             mock.seal
         else:
             print("enable breakpoint")
-        breakpoint()
 
     def test_module_setup(self):
         # Test
@@ -39,19 +42,50 @@ class TestModule(unittest.TestCase):
         module.setup()
 
     def test_sympol_creation(self):
-        # test
-        import jax
+        model = SympolRLModel(obs_dim=2, action_dim=1, config=asdict(CLIArgs()))  # pyright: ignore[reportArgumentType]
+        init_state = model.init_state(jax.random.PRNGKey(0), jax.numpy.zeros((2, 2)))
 
-        model = SympolRLModel(obs_dim=0, action_dim=0, config=asdict(CLIArgs()))
-        model({"obs": jax.numpy.array([1, 2, 3])})
-
-    def test_setup(self):
+    def test_setup_instantiation(self):
         # Test
         from rllib_port.sympol.sympol_setup import SympolSetup
 
         for actor in ["sympol", "sdt", "mlp"]:
             with mock.patch.object(sys, "argv", ["file.py", "--agent_type", actor]):
                 SympolSetup()
+
+    def test_sympol_underlying_model(self):
+        config = asdict(CLIArgs())
+        actor = SYMPOL_RL(
+            obs_dim=2,
+            action_dim=1,
+            depth=config["depth"],
+            n_estimators=config["n_estimators"],
+            action_type=config["action_type"],
+            subset_fraction=config.get("subset_fraction", 0.8),
+        )
+        actor.config = config  # type: ignore[assignment]
+        actor_state = SympolRLModel.init_state(actor, jax.random.PRNGKey(0), jax.numpy.zeros((2, 2)))
+        out = actor.apply(
+            actor_state.params,
+            jax.numpy.ones((2, 2)),
+            indices=actor_state.indices,
+        )
+
+    def test_sympol_apply(self):
+        model = SympolRLModel(obs_dim=2, action_dim=1, config=asdict(CLIArgs()))  # pyright: ignore[reportArgumentType]
+        actor_state = model.init_state(jax.random.PRNGKey(0), jax.numpy.zeros((2, 2)))
+        # indices =model.init_indices(jax.random.PRNGKey(0))
+        model.apply(
+            actor_state.params,
+            jax.numpy.ones((2, 2)),
+            indices=actor_state.indices,
+        )
+
+    def test_sympol_call(self):
+        model = SympolRLModel(obs_dim=2, action_dim=1, config=asdict(CLIArgs()))  # pyright: ignore[reportArgumentType]
+        actor_state = model.init_state(jax.random.PRNGKey(0), jax.numpy.zeros((2, 2)))
+        # indices =model.init_indices(jax.random.PRNGKey(0))
+        model({"params": actor_state.params, "obs": jax.numpy.ones((2, 2)), "indices": actor_state.indices})
 
 
 if __name__ == "__main__":

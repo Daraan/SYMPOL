@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 import optax
+from flax import struct
 
 from ray_utilities.jax.jax_model import JaxRLModel
 from sympol import SYMPOL_RL

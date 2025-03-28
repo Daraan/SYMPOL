@@ -81,7 +81,6 @@ class SYMPOL_RL:
             "leaf_array": leaf_classes_array,
             "log_std": log_std,
         }
-        breakpoint()
         return params
 
     def init_indices(self, random_key):
