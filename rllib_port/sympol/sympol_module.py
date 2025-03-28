@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 import jax
 from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
@@ -14,11 +14,10 @@ from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 
 if TYPE_CHECKING:
     import gymnasium as gym
-    from ray.rllib.algorithms.ppo.torch.default_ppo_torch_rl_module import DefaultPPOTorchRLModule
-    from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
     from ray.rllib.utils.typing import TensorType
-    from typing_extensions import Never
 
+    from config_types.params_types import SympolCatalogOptions
+    from ray_utilities.dummy_encoder import DummyActorCriticEncoder
     from rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
     from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
     from rllib_port.sympol.sympol_model import SympolRLModel
@@ -30,7 +29,8 @@ class SympolPPOModule(DefaultPPORLModule):
     # torch code: which should be equivalent
     vf: CriticSDTModel | CriticMLPModel
     pi: SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel[bool]
-    config: Never
+    encoder: DummyActorCriticEncoder
+    config: object
     """Deprecated: use model_config instead of config"""
 
     def __init__(
@@ -41,20 +41,21 @@ class SympolPPOModule(DefaultPPORLModule):
         action_space: Optional[gym.Space] = None,
         inference_only: Optional[bool] = None,
         learner_only: bool = False,
-        model_config: Union[dict, DefaultModelConfig],
+        model_config: Union[dict, SympolCatalogOptions],
         catalog_class=None,
         **kwargs,
     ):
         catalog_class = kwargs.pop("catalog_class", None)
         if catalog_class is None:
             catalog_class = SympolJaxPPOCatalog
+        self.model_config: SympolCatalogOptions
         super().__init__(
             config=config,
             observation_space=observation_space,
             action_space=action_space,
             inference_only=inference_only,
             learner_only=learner_only,
-            model_config=model_config,
+            model_config=cast(dict, model_config),
             catalog_class=catalog_class,
         )
 
@@ -84,7 +85,18 @@ class SympolPPOModule(DefaultPPORLModule):
     def setup(self):
         super().setup()
         actor = self.pi
-        actor_state = actor.init_state()
+        actory_key = jax.random.PRNGKey(0)  # XXX
+
+        assert self.observation_space is not None
+        sample = self.observation_space.sample()
+        breakpoint()
+        if isinstance(actor, JaxRLModel):
+            actor_state = actor.init_state(
+                actory_key,
+                sample=sample,
+            )
+        else:
+            params = actor.init(actory_key, sample)
 
     # region: forward methods
 
@@ -158,13 +170,14 @@ class SympolPPOModule(DefaultPPORLModule):
                     # input dict while the key returned is `(state_in, critic, h)`.
                     batch_ = batch.copy()
                     batch_[Columns.STATE_IN] = batch[Columns.STATE_IN][CRITIC]
-                embeddings = self.encoder.critic_encoder(batch_)[ENCODER_OUT]
+                embeddings = self.encoder.critic_encoder(batch_)[ENCODER_OUT]  # pyright: ignore[reportOptionalCall]
             # Shared encoder.
             else:
                 embeddings = self.encoder(batch)[ENCODER_OUT][CRITIC]
 
         # Value head. Should not be a list eve in continous case.
-        vf_out = self.vf(embeddings)
+        vf_out = self.vf(embeddings)  # type: ignore[arg-type]
+        breakpoint()
         return vf_out.squeeze(-1)
 
     def _forward_inference(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:

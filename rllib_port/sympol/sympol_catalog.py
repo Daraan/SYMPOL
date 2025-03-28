@@ -15,27 +15,32 @@ from rllib_port.sympol.sympol_model import SympolRLModel
 if TYPE_CHECKING:
     import gymnasium as gym
 
+    from config_types.params_types import SympolCatalogOptions
+
 
 class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
     def __init__(
         self,
         observation_space: gym.Space,
         action_space: gym.Space,
-        model_config_dict: dict,
+        model_config_dict: SympolCatalogOptions,
     ):
-        super().__init__(observation_space, action_space, model_config_dict)
+        super().__init__(observation_space, action_space, model_config_dict)  # pyright: ignore[reportArgumentType]
         self.actor_critic_encoder_config = DummyActorCriticEncoderConfig(
             base_encoder_config=self._encoder_config,
-            shared=self._model_config_dict["vf_share_layers"],
+            shared=self._model_config_dict.get("vf_share_layers", True),
         )
-        self.actor_type: str = self._model_config_dict["actor"]
+        self._actor_type = model_config_dict["actor"]
+        self._critic_type = model_config_dict["critic"]
 
         self._action_dist_class_fn = functools.partial(
             self._get_dist_cls_from_action_space, action_space=self.action_space
         )
 
+        self._model_config_dict: SympolCatalogOptions
+
     def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:  # noqa: ARG002
-        if self.actor_type in ("mlp", "stateActionDT"):
+        if self._actor_type in ("mlp", "stateActionDT"):
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
                     action_dim=self.action_space.n,  # type: ignore[attr-defined]
@@ -49,20 +54,15 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
                     neurons_per_layer=self._model_config_dict["neurons_per_layer"],
                 )
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for MLP's
-            # TODO: set this in setup!
-            # args.accumulate_gradients_every = 1  # do not accumulate gradients for MLP's
-            self._model_config_dict["accumulate_gradients_every"] = None  # likely no effect
             actor.apply = jax.jit(actor.apply)
-        elif self.actor_type == "sympol":
+        elif self._actor_type == "sympol":
+            assert self.observation_space.shape is not None
             return SympolRLModel(
-                obs_dim=self.observation_space.shape[0],  # type: ignore
-                action_dim=self.action_space.n,  # type: ignore[attr-defined]
-                depth=self._model_config_dict["depth"],
-                n_estimators=self._model_config_dict["n_estimators"],
-                action_type=self._model_config_dict["action_type"],
-                subset_fraction=self._model_config_dict.get("subset_fraction", 0.8),
+                obs_dim=self.observation_space.shape[0],
+                action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
+                config=self._model_config_dict,
             )
-        elif self.actor_type in ("sdt", "d-sdt"):
+        elif self._actor_type in ("sdt", "d-sdt"):
             actor = ActorSDTModel(
                 action_dim=self.action_space.n,  # type: ignore[attr-defined]
                 depth=self._model_config_dict["depth"],
@@ -71,25 +71,23 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
             )  # , temp=1)
 
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for SDT's
-            # TODO: set args.accumulate_gradients_every in setup
-            self._model_config_dict["accumulate_gradients_every"] = None  # do not accumulate gradients for SDT's
             actor.apply = jax.jit(actor.apply)
         else:
-            raise ValueError(f"Actor '{self.actor_type}' not implemented")
+            raise ValueError(f"Actor '{self._actor_type}' not implemented")
         return actor
 
     def build_vf_head(self, framework: str) -> CriticMLPModel | CriticSDTModel:
-        if self._model_config_dict["critic"] == "mlp":
+        if self._critic_type == "mlp":
             critic = CriticMLPModel(
                 num_layers=self._model_config_dict["num_layers"],
                 neurons_per_layer=self._model_config_dict["neurons_per_layer"],
             )
-        elif self._model_config_dict["critic"] == "sdt":
+        elif self._critic_type == "sdt":
             critic = CriticSDTModel(
                 depth=self._model_config_dict["depth"],
                 temperature=self._model_config_dict["temperature"],
             )
         else:
-            raise NotImplementedError(f"Critic '{self._model_config_dict['critic']}' not implemented")
+            raise NotImplementedError(f"Critic '{self._critic_type}' not implemented")
         critic.apply = jax.jit(critic.apply)
         return critic

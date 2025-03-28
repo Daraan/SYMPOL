@@ -50,6 +50,14 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     def process_args(self) -> None:
         self._process_args_sympol()
         self._process_args_ray_utilities()
+        assert self.agent_type == self.actor
+        if self.agent_type in ["mlp", "sdt", "d-sdt", "stateActionDT"]:
+            if self.accumulate_gradients_every != 1:
+                logger.warning(
+                    "Accumulating gradients is not used for agent type: %s. Setting accumulate_gradients_every = 1 ",
+                    self.agent_type,
+                )
+            self.accumulate_gradients_every = 1  # do not accumulate gradients
 
     def _process_args_ray_utilities(self) -> None:
         """Make CLIArgs compatible with DefaultArgumentParser"""

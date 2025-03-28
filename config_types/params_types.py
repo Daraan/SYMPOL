@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional, Protocol
 from typing_extensions import NotRequired, Literal, TypeGuard, TypeAliasType, TypedDict
 
@@ -35,11 +36,11 @@ class ArgsDict(TypedDict, total=True):
     optimize_config: bool
     n_trials: int
     view_size: int
+    actor: str
+    critic: Literal["mlp", "sdt", "sympol"]
 
 
 class PPOArgsDict(TypedDict, total=True):
-    actor: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"]
-    critic: Literal["mlp", "sdt", "sympol"]
     gamma: float
     gae_lambda: float
     ent_coef: float
@@ -56,6 +57,7 @@ class PPOArgsDict(TypedDict, total=True):
 
 
 class MLPModelArgsDict(TypedDict, total=True):
+    actor: Literal["mlp", "stateActionDT"] | str  # noqa: PYI051
     num_layers: int
     neurons_per_layer: int
 
@@ -63,6 +65,7 @@ class MLPModelArgsDict(TypedDict, total=True):
 
 
 class SDTModelArgsDict(TypedDict, total=True):
+    actor: Literal["sdt", "d-sdt"] | str  # noqa: PYI051
     depth: int
     temperature: float
     action_type: Literal["discrete", "continuous"]
@@ -71,6 +74,7 @@ class SDTModelArgsDict(TypedDict, total=True):
 
 
 class SYMPOLModelArgsDict(TypedDict, total=True):
+    actor: Literal["sympol"] | str  # noqa: PYI051
     depth: int
     n_estimators: int
     action_type: Literal["discrete", "continuous"]
@@ -82,8 +86,15 @@ class SYMPOLModelArgsDict(TypedDict, total=True):
 
     adamW: bool
 
+    subset_fraction: NotRequired[float]
+
     dropout: NotRequired[float]
     """Unused"""
+
+
+class SympolCatalogOptions(SYMPOLModelArgsDict, SDTModelArgsDict, MLPModelArgsDict):
+    critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
+    actor: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] | str  # noqa: PYI051
 
 
 class SDTArgsDict(SDTModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
