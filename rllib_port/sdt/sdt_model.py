@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from rllib_port.model_interface import FlaxRLModel
+from ray_utilities.jax.jax_model import FlaxRLModel
 from sdt import Actor_SDT, Critic_SDT
 from utils import _is_discreteT
 

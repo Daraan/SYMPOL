@@ -8,6 +8,7 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
+from ray_utilities.jax.jax_model import JaxRLModel
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 

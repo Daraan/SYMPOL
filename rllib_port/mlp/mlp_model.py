@@ -2,8 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
-
-from rllib_port.model_interface import FlaxRLModel
+from ray_utilities.jax.jax_model import FlaxRLModel
 
 logger = logging.getLogger(__name__)
 
