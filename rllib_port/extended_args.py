@@ -1,12 +1,18 @@
 import logging
 from typing import Literal
+
 from typing_extensions import Self
 
-
-from args import ArgumentParserWithDefaults, CLIArgs
+from args import ArgumentParserWithDefaults
+from config_types.args_types import CLIArgs
 from ray_utilities.config.typed_argument_parser import DefaultArgumentParser
 
 logger = logging.getLogger(__name__)
+
+
+# circular import define after class
+def get_args():
+    return SympolArgumentParser().parse_args()
 
 
 class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CLIArgs):

@@ -77,11 +77,11 @@ class Args(_HandleNos):
     """Path to save checkpoints"""
     render_each_eval: bool = False
     """If true, render environments each time there is an evaluation"""
-    no_render_env: bool = field(default=True, repr=False)
+    no_render_env: bool = field(default=False, repr=False)
     """Flag to disable rendering of the environment"""
     render_env: bool = True
     """Whether to render the environment"""
-    no_reduce_lr: bool = field(default=True, repr=False)
+    no_reduce_lr: bool = field(default=False, repr=False)
     """Flag to not use reduce_lr"""
     reduce_lr: bool = True
     """Whether to use reduce_lr"""

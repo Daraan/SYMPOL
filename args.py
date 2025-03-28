@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 import argparse
 import sys
 
-from config_types.args_types import CLIArgs
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from config_types.args_types import CLIArgs
+
+__all__ = ["get_args"]
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -28,14 +35,12 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
 
 
 # Circular import needs ArgumentParserWithDefaults to be defined first
-from rllib_port.extended_args import SympolArgumentParser, DefaultArgumentParser  # noqa: E402
-
-
-def get_args():
-    return SympolArgumentParser().parse_args()
+from rllib_port.extended_args import get_args  # noqa: E402
 
 
 def get_args_old() -> CLIArgs:
+    from config_types.args_types import CLIArgs
+
     parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
     parser.add_argument(
