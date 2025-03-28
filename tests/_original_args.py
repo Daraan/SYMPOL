@@ -1,22 +1,20 @@
 import argparse
 import sys
 
-from config_types.args_types import CLIArgs
 
-
-class ArgumentParserWithDefaults(argparse.ArgumentParser):
+class OldArgumentParserWithDefaults(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._explicit_args = set()
 
-    def parse_known_args(self, args=None, namespace=None):
+    def parse_known_args(self, args=None, namespace=None):  # type: ignore
         if args is None:
             args = sys.argv[1:]
         namespace, remaining_args = super().parse_known_args(args, namespace)
         self._explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
         return namespace, remaining_args
 
-    def parse_args(self, args=None, namespace=None):
+    def parse_args(self, args=None, namespace=None):  # type: ignore
         namespace, remaining_args = self.parse_known_args(args, namespace)
         if remaining_args:
             msg = "unrecognized arguments: %s"
@@ -27,8 +25,8 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         return self._explicit_args
 
 
-def get_args() -> CLIArgs:
-    parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
+def get_original_args():
+    parser = OldArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
     parser.add_argument(
         "--use_best_config",
@@ -328,75 +326,4 @@ def get_args() -> CLIArgs:
     if args.overwrite_explicit:
         args.__dict__.update(explicit_arg_values)
 
-    from rllib_port.extended_args import SympolArgumentParser
-
-    parser = SympolArgumentParser()
-    args2 = parser.parse_args()
-    from tap import Tap
-
-    for attr in (
-        a
-        for a in (set(dir(args)) | set(dir(args2))) - set(dir(Tap()))
-        if not (a == "get_explicit_args" or a.startswith(("_", "no_")))
-    ):
-        assert getattr(args, attr) == getattr(args2, attr), (
-            f"Attribute {attr} differs. {getattr(args, attr)} != {getattr(args2, attr)}"
-        )
-
-    from config_types.args_types import CLIArgs, PPOArgs, Args, GeneralArgs, SYMPOLArgs
-
-    dc = CLIArgs()
-    attrs = (
-        set(vars(dc).keys())
-        | PPOArgs.__dataclass_fields__.keys()
-        | GeneralArgs.__dataclass_fields__.keys()
-        | SYMPOLArgs.__dataclass_fields__.keys()
-        | Args.__dataclass_fields__.keys()
-        | set(vars(args).keys())
-    )
-    attrs = {a for a in attrs if not (a.startswith("_") or a.startswith("no_"))}
-    for attr in attrs:
-        assert hasattr(args, attr), f"Attribute {attr} is missing in args"
-        assert hasattr(dc, attr), f"Attribute {attr} is missing in CLIArgs"
-        assert getattr(args, attr) == getattr(dc, attr), (
-            f"Attribute {attr} is different in args and CLIArgs, {getattr(args, attr)} != {getattr(dc, attr)}"
-        )
-
-    return CLIArgs(**vars(args))
-
-
-def test_args_old_vs_new():
-    from args import get_args, get_args_old
-
-    new_args = get_args()
-    old_args = get_args_old()
-
-    from tap import Tap
-
-    for attr in (
-        a
-        for a in (set(dir(old_args)) | set(dir(new_args))) - set(dir(Tap()))
-        if not (a == "get_explicit_args" or a.startswith(("_", "no_")))
-    ):
-        assert getattr(old_args, attr) == getattr(new_args, attr), (
-            f"Attribute {attr} differs. {getattr(old_args, attr)} != {getattr(new_args, attr)}"
-        )
-
-    from config_types.args_types import CLIArgs, PPOArgs, Args, GeneralArgs, SYMPOLArgs
-
-    dc = CLIArgs()
-    attrs = (
-        set(vars(dc).keys())
-        | PPOArgs.__dataclass_fields__.keys()
-        | GeneralArgs.__dataclass_fields__.keys()
-        | SYMPOLArgs.__dataclass_fields__.keys()
-        | Args.__dataclass_fields__.keys()
-        | set(vars(old_args).keys())
-    )
-    attrs = {a for a in attrs if not (a.startswith("_") or a.startswith("no_"))}
-    for attr in attrs:
-        assert hasattr(old_args, attr), f"Attribute {attr} is missing in args"
-        assert hasattr(dc, attr), f"Attribute {attr} is missing in CLIArgs"
-        assert getattr(old_args, attr) == getattr(dc, attr), (
-            f"Attribute {attr} is different in args and CLIArgs, {getattr(old_args, attr)} != {getattr(dc, attr)}"
-        )
+    return args
