@@ -5,8 +5,8 @@ from config_types.args_types import CLIArgs
 from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
 from rllib_port.extended_args import SympolArgumentParser
 
-from _original_args import get_original_args
-from _test_utils import clean_args, fixed_args
+from tests._original_args import get_original_args
+from tests._test_utils import clean_args, fixed_args, get_required_keys
 
 _default_args = CLIArgs()
 _default_args_dict = vars(_default_args)
@@ -18,21 +18,21 @@ class TestArgs(unittest.TestCase):
     def test_typed_dict_conformance(self):
         self.assertEqual(
             _default_args_key_set,
-            set(CLIArgsDict.__required_keys__),
+            get_required_keys(CLIArgsDict),
         )
 
     def test_alt_params(self):
-        for key in SympolParams.__required_keys__:
+        for key in get_required_keys(SympolParams):
             self.assertIn(key, _default_args_key_set)
-        self.assertLessEqual(SympolParams.__required_keys__, _default_args_key_set)
+        self.assertLessEqual(get_required_keys(SympolParams), _default_args_key_set)
 
-        for key in MLPParams.__required_keys__:
+        for key in get_required_keys(MLPParams):
             self.assertIn(key, _default_args_key_set)
-        self.assertLessEqual(MLPParams.__required_keys__, _default_args_key_set)
+        self.assertLessEqual(get_required_keys(MLPParams), _default_args_key_set)
 
-        for key in SDTParams.__required_keys__:
+        for key in get_required_keys(SDTParams):
             self.assertIn(key, _default_args_key_set)
-        self.assertLessEqual(SDTParams.__required_keys__, _default_args_key_set)
+        self.assertLessEqual(get_required_keys(SDTParams), _default_args_key_set)
 
     # orignal <= cliargs <= Sympol
 

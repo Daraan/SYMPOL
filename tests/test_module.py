@@ -1,9 +1,11 @@
+from dataclasses import asdict
 import sys
 import unittest
 from unittest import mock
 
 from _test_utils import clean_args, fixed_args
 
+from config_types.args_types import CLIArgs
 from rllib_port.sympol.sympol_model import SympolRLModel
 from rllib_port.sympol.sympol_module import SympolPPOModule
 
@@ -31,7 +33,7 @@ class TestModule(unittest.TestCase):
         module = SympolPPOModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config=CLIArgs(),
+            model_config=asdict(CLIArgs()),
             inference_only=False,
         )
         module.setup()
@@ -40,7 +42,7 @@ class TestModule(unittest.TestCase):
         # test
         import jax
 
-        model = SympolRLModel(obs_dim=0, action_dim=0, action_type="discrete", depth=1, n_estimators=1)
+        model = SympolRLModel(obs_dim=0, action_dim=0, config=asdict(CLIArgs()))
         model({"obs": jax.numpy.array([1, 2, 3])})
 
     def test_setup(self):
