@@ -247,22 +247,15 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
         else:
             raise ValueError(f"Actor '{args.actor}' not implemented")
 
-        if args.adamW:
-            critic_state = TrainState.create(
-                apply_fn=None,
-                params=critic.init(critic_key, jnp.array([envs.single_observation_space.sample()])),
-                tx=optax.chain(
-                    optax.clip_by_global_norm(args.max_grad_norm), optax.adamw(learning_rate=args.learning_rate_critic)
-                ),
-            )
-        else:
-            critic_state = TrainState.create(
-                apply_fn=None,
-                params=critic.init(critic_key, jnp.array([envs.single_observation_space.sample()])),
-                tx=optax.chain(
-                    optax.clip_by_global_norm(args.max_grad_norm), optax.adam(learning_rate=args.learning_rate_critic)
-                ),
-            )
+        critic_state = TrainState.create(
+            apply_fn=None,
+            params=critic.init(critic_key, jnp.array([envs.single_observation_space.sample()])),
+            tx=optax.chain(
+                optax.clip_by_global_norm(args.max_grad_norm),
+                # adam or adamW:
+                (optax.adamw if args.adamW else optax.adam)(learning_rate=args.learning_rate_critic),
+            ),
+        )
 
         if args.actor == "sympol":
 
