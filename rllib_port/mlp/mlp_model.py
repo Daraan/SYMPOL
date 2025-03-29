@@ -1,25 +1,51 @@
 import logging
 from typing import TYPE_CHECKING
 
+import jax
+
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
-from ray_utilities.jax.jax_model import FlaxRLModel
+from rllib_port.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
+
+if TYPE_CHECKING:
+    from config_types.params_types import MLPParams
 
 logger = logging.getLogger(__name__)
 
 
-class ActorMLPModel(Actor_MLP, FlaxRLModel):
-    pass
+class ActorMLPModel(StatedActorFlaxRLModel[Actor_MLP, "MLPParams"]):
+    def _setup_model(self, action_dim: int, **kwargs):  # noqa: ARG002
+        model = Actor_MLP(
+            action_dim=action_dim,
+            num_layers=self.config["num_layers"],
+            neurons_per_layer=self.config["neurons_per_layer"],
+        )
+        model.apply = jax.jit(model.apply)
+        return model
 
 
-class ActorMLPContinuousModel(Actor_MLP_Continuous, FlaxRLModel):
-    pass
+class ActorMLPContinuousModel(StatedActorFlaxRLModel[Actor_MLP_Continuous, "MLPParams"]):
+    def _setup_model(self, action_dim: int, **kwargs):  # noqa: ARG002
+        model = Actor_MLP_Continuous(
+            action_dim=action_dim,
+            num_layers=self.config["num_layers"],
+            neurons_per_layer=self.config["neurons_per_layer"],
+        )
+        model.apply = jax.jit(model.apply)
+        return model
 
 
-class CriticMLPModel(Critic_MLP, FlaxRLModel):
-    pass
+class CriticMLPModel(StatedCriticFlaxRLModel[Critic_MLP, "MLPParams"]):
+    def _setup_model(self):
+        model = Critic_MLP(
+            num_layers=self.config["num_layers"],
+            neurons_per_layer=self.config["neurons_per_layer"],
+        )
+        model.apply = jax.jit(model.apply)
+        return model
 
 
 if TYPE_CHECKING:
-    ActorMLPModel(0, 0, 0)
-    ActorMLPContinuousModel(0, 0, 0)
-    CriticMLPModel(0, 0)
+    # Check ABC
+    ActorMLPModel(config={}, action_dim=1)  # pyright: ignore[reportArgumentType]
+    ActorMLPContinuousModel(config={}, action_dim=1)  # pyright: ignore[reportArgumentType]
+    CriticMLPModel(config={})  # pyright: ignore[reportArgumentType]

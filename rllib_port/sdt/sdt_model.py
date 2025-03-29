@@ -1,21 +1,43 @@
 import logging
 from typing import TYPE_CHECKING
 
-from ray_utilities.jax.jax_model import FlaxRLModel
+import jax
+
+from rllib_port.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
 from sdt import Actor_SDT, Critic_SDT
 from utils import _is_discreteT
+
+if TYPE_CHECKING:
+    from config_types.params_types import SDTParams
 
 logger = logging.getLogger(__name__)
 
 
-class ActorSDTModel(Actor_SDT[_is_discreteT], FlaxRLModel):
-    pass
+class ActorSDTModel(StatedActorFlaxRLModel[Actor_SDT[_is_discreteT], "SDTParams"]):
+    def _setup_model(self, action_dim: int, **kwargs) -> Actor_SDT[_is_discreteT]:
+        model: Actor_SDT[_is_discreteT] = Actor_SDT(
+            action_dim=action_dim,
+            depth=self.config["depth"],
+            temperature=self.config["temperature"],
+            action_type=self.config["action_type"],
+            **kwargs,
+        )
+        model.apply = jax.jit(model.apply)
+        return model
 
 
-class CriticSDTModel(Critic_SDT, FlaxRLModel):
-    pass
+class CriticSDTModel(StatedCriticFlaxRLModel[Critic_SDT, "SDTParams"]):
+    def _setup_model(self, **kwargs) -> Critic_SDT:
+        model = Critic_SDT(
+            depth=self.config["depth"],
+            temperature=self.config["temperature"],
+            **kwargs,
+        )
+        model.apply = jax.jit(model.apply)
+        return model
 
 
 if TYPE_CHECKING:
-    ActorSDTModel(action_dim=0, depth=0, temperature=0.0, action_type="discrete")
-    CriticSDTModel(depth=0, temperature=0.0)
+    # Check ABC
+    ActorSDTModel(action_dim=0, config=SDTParams(**{}))  # noqa: PIE804
+    CriticSDTModel(SDTParams(**{}))  # noqa: PIE804

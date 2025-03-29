@@ -43,18 +43,15 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
         if self._actor_type in ("mlp", "stateActionDT"):
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
-                    action_dim=self.action_space.n,  # type: ignore[attr-defined]
-                    num_layers=self._model_config_dict["num_layers"],
-                    neurons_per_layer=self._model_config_dict["neurons_per_layer"],
+                    config=self._model_config_dict,
+                    action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
                 )
             else:
                 actor = ActorMLPContinuousModel(
-                    action_dim=self.action_space.n,  # type: ignore[attr-defined]
-                    num_layers=self._model_config_dict["num_layers"],
-                    neurons_per_layer=self._model_config_dict["neurons_per_layer"],
+                    config=self._model_config_dict,
+                    action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
                 )
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for MLP's
-            actor.apply = jax.jit(actor.apply)
         elif self._actor_type == "sympol":
             assert self.observation_space.shape is not None
             return SympolRLModel(
@@ -64,30 +61,20 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
             )
         elif self._actor_type in ("sdt", "d-sdt"):
             actor = ActorSDTModel(
-                action_dim=self.action_space.n,  # type: ignore[attr-defined]
-                depth=self._model_config_dict["depth"],
-                temperature=self._model_config_dict["temperature"],
-                action_type=self._model_config_dict["action_type"],
+                config=self._model_config_dict,
+                action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
             )  # , temp=1)
 
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for SDT's
-            actor.apply = jax.jit(actor.apply)
         else:
             raise ValueError(f"Actor '{self._actor_type}' not implemented")
         return actor
 
     def build_vf_head(self, framework: str) -> CriticMLPModel | CriticSDTModel:
         if self._critic_type == "mlp":
-            critic = CriticMLPModel(
-                num_layers=self._model_config_dict["num_layers"],
-                neurons_per_layer=self._model_config_dict["neurons_per_layer"],
-            )
+            critic = CriticMLPModel(self._model_config_dict)
         elif self._critic_type == "sdt":
-            critic = CriticSDTModel(
-                depth=self._model_config_dict["depth"],
-                temperature=self._model_config_dict["temperature"],
-            )
+            critic = CriticSDTModel(self._model_config_dict)
         else:
             raise NotImplementedError(f"Critic '{self._critic_type}' not implemented")
-        critic.apply = jax.jit(critic.apply)
         return critic

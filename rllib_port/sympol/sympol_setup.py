@@ -23,6 +23,10 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
     def group_name(self) -> str:
         return "sympol"
 
+    def create_parser(self):
+        self.parser = SympolArgumentParser()
+        return self.parser
+
     def _create_config(self):
         return self.config_from_args(self.args)
 
@@ -33,7 +37,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             env_type=args.env_type,
             module_class=SympolPPOModule,
             catalog_class=SympolJaxPPOCatalog,
-            model_config=args,
+            model_config=args.as_dict() if hasattr(args, "as_dict") else vars(args).copy(),
             framework="jax",  # cannot use "jax" here
             discrete_eval=False,
         )
@@ -44,6 +48,10 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             raise NotImplementedError()
 
         return foo
+
+    def create_param_space(self):
+        # FIXME
+        ...
 
 
 if TYPE_CHECKING:

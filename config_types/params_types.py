@@ -37,7 +37,7 @@ class ArgsDict(TypedDict, total=True):
     n_trials: int
     view_size: int
     actor: str
-    critic: Literal["mlp", "sdt", "sympol"]
+    critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
 
 
 class PPOArgsDict(TypedDict, total=True):
@@ -109,7 +109,7 @@ class SYMPOLArgsDict(SYMPOLModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict
     pass
 
 
-class CLIArgsDict(SYMPOLArgsDict, MLPArgsDict, SDTArgsDict):
+class CLIArgsDict(SympolCatalogOptions, SYMPOLArgsDict, MLPArgsDict, SDTArgsDict):
     pass
 
 
@@ -128,19 +128,22 @@ class GeneralParams(TypedDict):
     n_envs: NotRequired[int]
 
 
-class MLPParams(GeneralParams):
+class GeneralParamsWithLR(GeneralParams):
     learning_rate_actor: float
+
+
+class MLPParams(GeneralParamsWithLR):
     num_layers: int
     neurons_per_layer: int
     adamW: NotRequired[bool]
 
 
-class SDTParams(GeneralParams):
+class SDTParams(GeneralParamsWithLR):
     depth: int
-    learning_rate_actor: float
     adamW: NotRequired[bool]
     critic: Literal["mlp", "sdt"]
     temperature: float
+    action_type: Literal["discrete", "continuous"]
 
 
 class SympolParams(GeneralParams):

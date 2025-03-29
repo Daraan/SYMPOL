@@ -13,6 +13,7 @@ from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 
 if TYPE_CHECKING:
+    import chex
     import gymnasium as gym
     from ray.rllib.utils.typing import TensorType
 
@@ -49,6 +50,7 @@ class SympolPPOModule(DefaultPPORLModule):
         if catalog_class is None:
             catalog_class = SympolJaxPPOCatalog
         self.model_config: SympolCatalogOptions
+        breakpoint()
         super().__init__(
             config=config,
             observation_space=observation_space,
@@ -85,18 +87,27 @@ class SympolPPOModule(DefaultPPORLModule):
     def setup(self):
         super().setup()
         actor = self.pi
+        critic = self.vf
         actory_key = jax.random.PRNGKey(0)  # XXX
+        critic_key = jax.random.PRNGKey(1)  # Use a different key for critic
 
         assert self.observation_space is not None
         sample = self.observation_space.sample()
-        breakpoint()
-        if isinstance(actor, JaxRLModel):
-            actor_state = actor.init_state(
-                actory_key,
-                sample=sample,
-            )
-        else:
-            params = actor.init(actory_key, sample)
+        actor_state = actor.init_state(actory_key, sample)
+        critic_state = critic.init_state(critic_key, sample)
+
+        self.states = {
+            ACTOR: actor_state,
+            CRITIC: critic_state,
+        }
+
+    def to(self, device: Optional[chex.Device] = None):
+        # FIXME: Implement proper device handling
+        if device is None:
+            # put all states on device
+            device = jax.local_devices()[0]
+        self.states[ACTOR] = jax.device_put(self.states[ACTOR], device)
+        self.states[CRITIC] = jax.device_put(self.states[CRITIC], device)
 
     # region: forward methods
 
@@ -139,7 +150,17 @@ class SympolPPOModule(DefaultPPORLModule):
             output[Columns.ACTION_DIST_INPUTS] = model_out
         return output
 
-    # endregion
+    def _forward_inference(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:
+        """Forward-pass used for action computation without exploration behavior.
+
+        Override this method only, if you need specific behavior for non-exploratory
+        action computation behavior. If you have only one generic behavior for all
+        phases of training and evaluation, override `self._forward()` instead.
+
+        By default, this calls the generic `self._forward()` method.
+        """
+        batch = jax.lax.stop_gradient(batch)
+        return self._forward(batch, **kwargs)
 
     def compute_values(
         self,
@@ -180,17 +201,7 @@ class SympolPPOModule(DefaultPPORLModule):
         breakpoint()
         return vf_out.squeeze(-1)
 
-    def _forward_inference(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:
-        """Forward-pass used for action computation without exploration behavior.
-
-        Override this method only, if you need specific behavior for non-exploratory
-        action computation behavior. If you have only one generic behavior for all
-        phases of training and evaluation, override `self._forward()` instead.
-
-        By default, this calls the generic `self._forward()` method.
-        """
-        batch = jax.lax.stop_gradient(batch)
-        return self._forward(batch, **kwargs)
+    # endregion
 
 
 if TYPE_CHECKING:
