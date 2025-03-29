@@ -1,11 +1,9 @@
-from functools import partial
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 # from torch.autograd import Function
-import distrax
+import chex
 import jax
 import jax.numpy as jnp
-from flax import linen as nn
 from flax import struct
 
 from utils.jax_math import entmax15JAX
@@ -23,7 +21,7 @@ class SYMPOL_RL:
 
     # **kwargs is only used here to be compatible with the flax init procedure, i.e.
     # params = model.init(key, sample_input)
-    def init(self, random_key, *args):
+    def init(self, random_key, *args) -> dict[str, chex.Array]:
         estimator_weights_key, split_values_key, split_index_array_key, leaf_classes_array_key, logstd_key = (
             jax.random.split(random_key, 5)
         )
@@ -74,7 +72,7 @@ class SYMPOL_RL:
             dtype=jnp.float32,
         )
 
-        params = {
+        params: dict[str, chex.Array] = {
             "estimator_weights": estimator_weights,
             "split_values": split_values,
             "split_idx_array": split_index_array,
@@ -83,7 +81,7 @@ class SYMPOL_RL:
         }
         return params
 
-    def init_indices(self, random_key):
+    def init_indices(self, random_key) -> dict[str, chex.Array]:
         leaf_node_num = 2**self.depth
         if self.n_estimators > 1:
             selected_variables = int(self.obs_dim * self.subset_fraction)
@@ -119,7 +117,7 @@ class SYMPOL_RL:
         # jax.debug.print("path_identifier_list: {}", path_identifier_list)
         # jax.debug.print("internal_node_index_list: {}", internal_node_index_list)
 
-        indices = {
+        indices: dict[str, chex.Array] = {
             "features_by_estimator": features_by_estimator,
             "path_identifier_list": path_identifier_list,
             "internal_node_index_list": internal_node_index_list,
@@ -197,3 +195,10 @@ class SYMPOL_RL:
             raise ValueError(f"Invalid action type {self.action_type}")
 
         return result
+
+
+if TYPE_CHECKING:
+    # Test assignability
+    from ray_utilities.jax.jax_model import PureJaxModelProtocol
+
+    _: type[PureJaxModelProtocol] = SYMPOL_RL

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, overload
+from typing_extensions import Self
 
 import jax
 import jax.numpy as jnp
 import optax
-from flax import struct
+from ray.rllib.utils.typing import TensorType
 
-from ray_utilities.jax.jax_model import JaxRLModel
+from ray_utilities.jax.jax_model import JaxRLModel, PureJaxModelProtocol
 from sympol import SYMPOL_RL
 from utils.utils import ActorTrainState
 
@@ -21,17 +22,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolRLModel(SYMPOL_RL, JaxRLModel):
+# NOTE: Not a pytree node
+class SympolRLModel(JaxRLModel):
     if TYPE_CHECKING:
 
         def __config_type(self):  # noqa
             self.config: SympolParams
 
+        def __call__(self, *args, **kwargs) -> TensorType:
+            """Call the model."""
+            return super().__call__(*args, **kwargs)
+
     def __init__(self, *, obs_dim: int, action_dim: int, config: SYMPOLModelArgsDict):
-        JaxRLModel.__init__(self, config)  # type: ignore[arg-type] not a ModelConfig
-        config["action_type"]
-        SYMPOL_RL.__init__(
-            self,
+        JaxRLModel.__init__(self, config=config)  # type: ignore[arg-type] not a ModelConfig
+        # pytree_node_class
+        self.model = SYMPOL_RL(
             obs_dim=obs_dim,
             action_dim=action_dim,
             depth=config["depth"],
@@ -39,14 +44,28 @@ class SympolRLModel(SYMPOL_RL, JaxRLModel):
             action_type=config["action_type"],
             subset_fraction=config.get("subset_fraction", 0.8),
         )
+        assert self.config == config
 
-    def init_state(self, rng: chex.PRNGKey, sample: TensorType | chex.Array) -> ActorTrainState:
+    def init_state(
+        self: Self | PureJaxModelProtocol,
+        rng: chex.PRNGKey,
+        sample: TensorType | chex.Array,
+        *,
+        config: Optional[SympolParams] = None,
+    ) -> ActorTrainState:
         """
         Arg:
             sample: envs.single_observation_space.sample()
             rng: The actor_key
         """
-        actor = self
+        if isinstance(self, PureJaxModelProtocol):
+            actor = self
+            if config is None:
+                raise ValueError("If using init_state as a classmethod, config should be passed")
+        else:
+            actor = self.model
+            if config is None:
+                config = self.config
 
         def map_nested_fn(fn):
             """Recursively apply `fn` to key-value pairs of a nested dict."""
@@ -56,32 +75,30 @@ class SympolRLModel(SYMPOL_RL, JaxRLModel):
 
             return map_fn
 
-        if self.config["SWA"]:
+        if config["SWA"]:
             from optax_swag import swag
 
-            if self.config["adamW"]:
+            if config["adamW"]:
                 actor_state = ActorTrainState.create(
                     apply_fn=None,
                     params=actor.init(rng, jnp.array([sample])),
                     tx=optax.chain(
-                        optax.clip_by_global_norm(self.config["max_grad_norm"]),
+                        optax.clip_by_global_norm(config["max_grad_norm"]),
                         optax.multi_transform(
                             {
                                 "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_weights"]
+                                    config["learning_rate_actor_weights"]
                                 ),
                                 "split_values": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_split_values"]
+                                    config["learning_rate_actor_split_values"]
                                 ),
                                 "split_idx_array": optax.inject_hyperparams(optax.adamw)(
-                                    self.config["learning_rate_actor_split_idx_array"]
+                                    config["learning_rate_actor_split_idx_array"]
                                 ),
                                 "leaf_array": optax.inject_hyperparams(optax.adamw)(
-                                    self.config["learning_rate_actor_leaf_array"]
+                                    config["learning_rate_actor_leaf_array"]
                                 ),
-                                "log_std": optax.inject_hyperparams(optax.adamw)(
-                                    self.config["learning_rate_actor_log_std"]
-                                ),
+                                "log_std": optax.inject_hyperparams(optax.adamw)(config["learning_rate_actor_log_std"]),
                             },
                             map_nested_fn(lambda k, _: k),
                         ),
@@ -95,24 +112,22 @@ class SympolRLModel(SYMPOL_RL, JaxRLModel):
                     apply_fn=None,
                     params=actor.init(rng, jnp.array([sample])),
                     tx=optax.chain(
-                        optax.clip_by_global_norm(self.config["max_grad_norm"]),
+                        optax.clip_by_global_norm(config["max_grad_norm"]),
                         optax.multi_transform(
                             {
                                 "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_weights"]
+                                    config["learning_rate_actor_weights"]
                                 ),
                                 "split_values": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_split_values"]
+                                    config["learning_rate_actor_split_values"]
                                 ),
                                 "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_split_idx_array"]
+                                    config["learning_rate_actor_split_idx_array"]
                                 ),
                                 "leaf_array": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_leaf_array"]
+                                    config["learning_rate_actor_leaf_array"]
                                 ),
-                                "log_std": optax.inject_hyperparams(optax.adam)(
-                                    self.config["learning_rate_actor_log_std"]
-                                ),
+                                "log_std": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_log_std"]),
                             },
                             map_nested_fn(lambda k, _: k),
                         ),
@@ -121,29 +136,27 @@ class SympolRLModel(SYMPOL_RL, JaxRLModel):
                     grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
                     indices=actor.init_indices(rng),
                 )
-        elif self.config["adamW"]:
+        elif config["adamW"]:
             actor_state: ActorTrainState = ActorTrainState.create(
                 apply_fn=None,
                 params=actor.init(rng, jnp.array([sample])),
                 tx=optax.chain(
-                    optax.clip_by_global_norm(self.config["max_grad_norm"]),
+                    optax.clip_by_global_norm(config["max_grad_norm"]),
                     optax.multi_transform(
                         {
                             "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_weights"]
+                                config["learning_rate_actor_weights"]
                             ),
                             "split_values": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_split_values"]
+                                config["learning_rate_actor_split_values"]
                             ),
                             "split_idx_array": optax.inject_hyperparams(optax.adamw)(
-                                self.config["learning_rate_actor_split_idx_array"]
+                                config["learning_rate_actor_split_idx_array"]
                             ),
                             "leaf_array": optax.inject_hyperparams(optax.adamw)(
-                                self.config["learning_rate_actor_leaf_array"]
+                                config["learning_rate_actor_leaf_array"]
                             ),
-                            "log_std": optax.inject_hyperparams(optax.adamw)(
-                                self.config["learning_rate_actor_log_std"]
-                            ),
+                            "log_std": optax.inject_hyperparams(optax.adamw)(config["learning_rate_actor_log_std"]),
                         },
                         map_nested_fn(lambda k, _: k),
                     ),
@@ -156,22 +169,22 @@ class SympolRLModel(SYMPOL_RL, JaxRLModel):
                 apply_fn=None,
                 params=actor.init(rng, jnp.array([sample])),
                 tx=optax.chain(
-                    optax.clip_by_global_norm(self.config["max_grad_norm"]),
+                    optax.clip_by_global_norm(config["max_grad_norm"]),
                     optax.multi_transform(
                         {
                             "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_weights"]
+                                config["learning_rate_actor_weights"]
                             ),
                             "split_values": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_split_values"]
+                                config["learning_rate_actor_split_values"]
                             ),
                             "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_split_idx_array"]
+                                config["learning_rate_actor_split_idx_array"]
                             ),
                             "leaf_array": optax.inject_hyperparams(optax.adam)(
-                                self.config["learning_rate_actor_leaf_array"]
+                                config["learning_rate_actor_leaf_array"]
                             ),
-                            "log_std": optax.inject_hyperparams(optax.adam)(self.config["learning_rate_actor_log_std"]),
+                            "log_std": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_log_std"]),
                         },
                         map_nested_fn(lambda k, _: k),
                     ),
