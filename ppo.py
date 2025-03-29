@@ -395,14 +395,13 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                     )
 
         else:
-            learning_rate_actor = args.learning_rate_actor
             if args.adamW:
                 actor_state = ActorTrainState.create(
                     apply_fn=None,
                     params=actor.init(actor_key, jnp.array([envs.single_observation_space.sample()])),
                     tx=optax.chain(
                         optax.clip_by_global_norm(args.max_grad_norm),
-                        optax.inject_hyperparams(optax.adamw)(learning_rate_actor),
+                        optax.inject_hyperparams(optax.adamw)(args.learning_rate_actor),
                     ),
                     grad_accum=jax.tree.map(
                         jnp.zeros_like, actor.init(actor_key, jnp.array([envs.single_observation_space.sample()]))
@@ -415,7 +414,7 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                     params=actor.init(actor_key, jnp.array([envs.single_observation_space.sample()])),
                     tx=optax.chain(
                         optax.clip_by_global_norm(args.max_grad_norm),
-                        optax.inject_hyperparams(optax.adam)(learning_rate_actor),
+                        optax.inject_hyperparams(optax.adam)(args.learning_rate_actor),
                     ),
                     grad_accum=jax.tree.map(
                         jnp.zeros_like, actor.init(actor_key, jnp.array([envs.single_observation_space.sample()]))
