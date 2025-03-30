@@ -2,6 +2,7 @@ import unittest
 
 from args import get_args, get_args_old  # noqa: F401  # avoid circular imports
 from config_types.args_types import CLIArgs
+from dataclasses import asdict
 from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
 from rllib_port.extended_args import SympolArgumentParser
 
@@ -9,11 +10,34 @@ from tests._original_args import get_original_args
 from tests._test_utils import clean_args, fixed_args, get_required_keys
 
 _default_args = CLIArgs()
+# NOTE: In vars no_ attributes are removed; with asdict not!
 _default_args_dict = vars(_default_args)
 _default_args_key_set = set(_default_args_dict.keys())
 
 
 class TestArgs(unittest.TestCase):
+    def test_equivalence(self):
+        self.maxDiff = 2000
+        self.assertEqual(hash(_default_args), hash(CLIArgs()))
+
+        args_same = CLIArgs()
+        args_same_dict = asdict(args_same)
+
+        with self.assertRaises(AssertionError):
+            # no_ attributes are not present when using vars; with asdict they are
+            self.assertEqual(args_same_dict, _default_args_dict)
+
+        same_dict_positive = {k: v for k, v in args_same_dict.items() if not k.startswith("no_")}
+        self.assertDictEqual(_default_args_dict, same_dict_positive)
+        self.assertEqual(hash(tuple(_default_args_dict.items())), hash(tuple(same_dict_positive.items())))
+
+        args_different = CLIArgs()
+        args_different.depth = 2
+        args_different_dict = vars(args_different)
+        self.assertNotEqual(args_different, _default_args)
+        self.assertNotEqual(hash(args_different), hash(_default_args))
+        self.assertNotEqual(args_different_dict, _default_args_dict)
+
     # Test key presence
     def test_typed_dict_conformance(self):
         self.assertEqual(

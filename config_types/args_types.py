@@ -27,7 +27,7 @@ class GeneralArgs(_HandleNos):
     """Experiment name, important for wandb tracking"""
     run_name: str = "Default"
     """Name for the current run"""
-    device: str = "cuda"
+    device: str = field(default="cuda", hash=False, compare=False)
     """Device to use for training"""
     track: bool = False
     """If true, initialize a wandb run and track the results"""
@@ -210,7 +210,7 @@ class SYMPOLArgs(SYMPOLModelArgs, PPOArgs, Args, GeneralArgs):
     """Arguments for the command line interface"""
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, eq=True, unsafe_hash=True)
 class CLIArgs(SYMPOLArgs, MLPArgs, SDTArgs):
     """Arguments for the command line interface"""
 
