@@ -8,11 +8,11 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
-from ray_utilities.jax.jax_model import JaxRLModel
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 
 if TYPE_CHECKING:
+    from config_types.params_types import CLIArgsDict
     import chex
     import gymnasium as gym
     from ray.rllib.utils.typing import TensorType
@@ -42,15 +42,14 @@ class SympolPPOModule(DefaultPPORLModule):
         action_space: Optional[gym.Space] = None,
         inference_only: Optional[bool] = None,
         learner_only: bool = False,
-        model_config: Union[dict, SympolCatalogOptions],
+        model_config: Union[dict, CLIArgsDict],
         catalog_class=None,
         **kwargs,
     ):
         catalog_class = kwargs.pop("catalog_class", None)
         if catalog_class is None:
             catalog_class = SympolJaxPPOCatalog
-        self.model_config: SympolCatalogOptions
-        breakpoint()
+        self.model_config: CLIArgsDict
         super().__init__(
             config=config,
             observation_space=observation_space,
@@ -88,12 +87,12 @@ class SympolPPOModule(DefaultPPORLModule):
         super().setup()
         actor = self.pi
         critic = self.vf
-        actory_key = jax.random.PRNGKey(0)  # XXX
-        critic_key = jax.random.PRNGKey(1)  # Use a different key for critic
+        model_key = jax.random.PRNGKey(self.model_config["seed"])
+        model_key, actor_key, critic_key = jax.random.split(model_key, 3)
 
         assert self.observation_space is not None
         sample = self.observation_space.sample()
-        actor_state = actor.init_state(actory_key, sample)
+        actor_state = actor.init_state(actor_key, sample)
         critic_state = critic.init_state(critic_key, sample)
 
         self.states = {
