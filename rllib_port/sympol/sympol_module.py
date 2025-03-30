@@ -10,14 +10,16 @@ from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
+from utils.get_action_and_value import get_action_and_value
+from utils.utils import ActorTrainState, Storage, TrainState
 
 if TYPE_CHECKING:
-    from config_types.params_types import CLIArgsDict
     import chex
     import gymnasium as gym
+    from numpy.typing import NDArray
     from ray.rllib.utils.typing import TensorType
 
-    from config_types.params_types import SympolCatalogOptions
+    from config_types.params_types import CLIArgsDict
     from ray_utilities.dummy_encoder import DummyActorCriticEncoder
     from rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
     from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
@@ -178,8 +180,10 @@ class SympolPPOModule(DefaultPPORLModule):
 
         Returns:
             A tensor of shape (B,) or (B, T) (in case the input `batch` has a
-            time dimension. Note that the last value dimension should already be
-            squeezed out (not 1!).
+            time dimension.
+
+            Attention:
+                That the last value dimension should already be squeezed out (not 1!).
         """
         if embeddings is None:
             # Separate vf-encoder.
@@ -201,6 +205,37 @@ class SympolPPOModule(DefaultPPORLModule):
         return vf_out.squeeze(-1)
 
     # endregion
+
+    # region non-rllib interface
+
+    def update_state(self, *, actor: Optional[ActorTrainState], critic: Optional[TrainState]):
+        """Update the actor and critic states."""
+        if actor:
+            self.states[ACTOR] = actor
+        else:
+            self.states[CRITIC] = critic
+
+    def get_action_and_value(
+        self,
+        next_obs: NDArray,
+        next_done: NDArray,
+        storage: Storage,
+        step: int,
+        key: chex.PRNGKey,
+    ) -> tuple[Storage, Any | chex.Array, chex.PRNGKey]:
+        storage, action, key = get_action_and_value(
+            actor_state=self.states[ACTOR],
+            critic_state=self.states[CRITIC],
+            next_obs=next_obs,
+            next_done=next_done,
+            storage=storage,
+            step=step,
+            key=key,
+            action_type=self.model_config["action_type"],
+            actor=self.pi.model,
+            critic=self.vf.model,
+        )
+        return storage, action, key
 
 
 if TYPE_CHECKING:
