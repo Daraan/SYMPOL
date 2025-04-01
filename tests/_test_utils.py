@@ -45,6 +45,7 @@ def get_optional_keys(cls):
 
 class SetupDefaults(unittest.TestCase):
     def setUp(self):
+        print("Remember to enable/disable justMyCode('\"debugpy.debugJustMyCode\": false,') in the settings")
         env = gym.make("CartPole-v1")
 
         self._OBSERVATION_SPACE = env.observation_space

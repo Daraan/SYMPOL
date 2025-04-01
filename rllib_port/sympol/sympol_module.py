@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Optional, TypedDict, Union, cast
 
 import jax
 from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
@@ -8,6 +8,7 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
+from ray_utilities.jax.distributions.get_distributions_mixin import RLModuleGetJaxDistributions
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 from utils.get_action_and_value import get_action_and_value
@@ -28,7 +29,13 @@ if TYPE_CHECKING:
 # for a Intermediate old API to new API Module
 
 
-class SympolPPOModule(DefaultPPORLModule):
+class StatesDict(TypedDict):
+    actor: ActorTrainState
+    critic: TrainState
+    module_key: chex.PRNGKey
+
+
+class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
     # torch code: which should be equivalent
     vf: CriticSDTModel | CriticMLPModel
     pi: SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel[bool]
@@ -58,7 +65,7 @@ class SympolPPOModule(DefaultPPORLModule):
             action_space=action_space,
             inference_only=inference_only,
             learner_only=learner_only,
-            model_config=cast(dict, model_config),
+            model_config=cast("dict", model_config),
             catalog_class=catalog_class,
         )
 
@@ -89,21 +96,23 @@ class SympolPPOModule(DefaultPPORLModule):
         super().setup()
         actor = self.pi
         critic = self.vf
-        model_key = jax.random.PRNGKey(self.model_config["seed"])
-        model_key, actor_key, critic_key = jax.random.split(model_key, 3)
+        module_key = jax.random.PRNGKey(self.model_config["seed"])
+        module_key, actor_key, critic_key = jax.random.split(module_key, 3)
 
         assert self.observation_space is not None
         sample = self.observation_space.sample()
         actor_state = actor.init_state(actor_key, sample)
         critic_state = critic.init_state(critic_key, sample)
 
-        self.states = {
+        self.states: StatesDict = {
             ACTOR: actor_state,
             CRITIC: critic_state,
+            "module_key": module_key,
         }
 
     def to(self, device: Optional[chex.Device] = None):
         # FIXME: Implement proper device handling
+        return
         if device is None:
             # put all states on device
             device = jax.local_devices()[0]
@@ -122,6 +131,9 @@ class SympolPPOModule(DefaultPPORLModule):
         if Columns.STATE_OUT in encoder_outs:
             output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
         # Pi head.
+        encoder_outs[ENCODER_OUT][ACTOR]
+        # print("forward out encoder_outs[ENCODER_OUT][ACTOR])
+        encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
         model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
         if self.model_config["action_type"] != "discrete":
             mean, log_std = model_out
@@ -141,6 +153,7 @@ class SympolPPOModule(DefaultPPORLModule):
         output[Columns.EMBEDDINGS] = encoder_outs[ENCODER_OUT][CRITIC]
         if Columns.STATE_OUT in encoder_outs:
             output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
+        encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
         model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
         if self.model_config["action_type"] != "discrete":
             mean, log_std = model_out
@@ -199,10 +212,12 @@ class SympolPPOModule(DefaultPPORLModule):
             else:
                 embeddings = self.encoder(batch)[ENCODER_OUT][CRITIC]
 
+        embeddings["state"] = self.states[CRITIC]
         # Value head. Should not be a list eve in continous case.
         vf_out = self.vf(embeddings)  # type: ignore[arg-type]
-        breakpoint()
-        return vf_out.squeeze(-1)
+        vf_out = vf_out.squeeze(-1)
+        batch[Columns.VF_PREDS] = vf_out  # NEW: does not add this to batch here; but should be logged elsewhere
+        return vf_out
 
     # endregion
 
@@ -224,7 +239,7 @@ class SympolPPOModule(DefaultPPORLModule):
         key: chex.PRNGKey,
     ) -> tuple[Storage, Any | chex.Array, chex.PRNGKey]:
         storage, action, key = get_action_and_value(
-            actor_state=self.states[ACTOR],
+            actor_state_params=self.states[ACTOR].params,
             critic_state=self.states[CRITIC],
             next_obs=next_obs,
             next_done=next_done,
@@ -234,8 +249,12 @@ class SympolPPOModule(DefaultPPORLModule):
             action_type=self.model_config["action_type"],
             actor=self.pi.model,
             critic=self.vf.model,
+            actor_state_indices=self.states[ACTOR].indices,  # pyright: ignore[reportAttributeAccessIssue]
         )
         return storage, action, key
+
+    def parameters(self):
+        return self.states[ACTOR].params, self.states[CRITIC].params
 
 
 if TYPE_CHECKING:

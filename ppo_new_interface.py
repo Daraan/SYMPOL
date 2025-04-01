@@ -258,7 +258,9 @@ def train_agent(
             actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step = rollout(  # pyright: ignore[reportPossiblyUnboundVariable]
                 actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step
             )
+            print("Storage intermediate", storage)
             storage = compute_gae(critic_state, next_obs, next_done, storage, critic=critic, args=args)
+            print("Storage with gae", storage)
             actor_state, critic_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key = update_ppo(
                 actor_state,
                 critic_state,
@@ -272,6 +274,7 @@ def train_agent(
                 critic=critic,
                 actor_state_indices=actor_state.indices,
             )
+            print("storage final", storage)
 
             elapsed_time_cleaned = time.time() - start_time_cleaned
             total_time_cleaned += elapsed_time_cleaned

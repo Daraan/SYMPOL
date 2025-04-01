@@ -4,14 +4,15 @@ import dataclasses
 import os
 import sys
 import unittest
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest import mock
 
+import gymnasium as gym
 import jax
 import numpy.testing as npt
 from ray.rllib.core.columns import Columns
-import args  # noqa: F401
 
+import args  # noqa: F401
 from mlp import Critic_MLP
 from rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
 from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
@@ -22,8 +23,10 @@ from sympol import SYMPOL_RL
 from tests._test_utils import DisableBreakpointsForGUI, SetupDefaults, clean_args
 
 if TYPE_CHECKING:
-    from ray_utilities.jax.jax_model import PureJaxModelProtocol
+    from ray.rllib.connectors.env_to_module.env_to_module_pipeline import EnvToModulePipeline
+    from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
 
+    from ray_utilities.jax.jax_model import PureJaxModelProtocol
 
 os.environ["RAY_DEBUG"] = "0"
 
@@ -264,14 +267,8 @@ class TestSetup(DisableBreakpointsForGUI, SetupDefaults):
     def test_setup_instantiation(self):
         for actor in ["sympol", "sdt", "mlp"]:
             with mock.patch.object(sys, "argv", ["file.py", "--agent_type", actor]):
+                # fails as expects trial parameter
                 SympolSetup()
-
-    def Xtest_algorithm_build(self):
-        with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
-            setup = SympolSetup()
-            algorithm_config = setup.config
-            algorithm_config.framework("torch")
-            algorithm_config.build_algo()
 
 
 if __name__ == "__main__":

@@ -20,10 +20,10 @@ if TYPE_CHECKING:
 class Indices:
     """Frozen and hashable variant of the indices dict to allow using them as static_args"""
 
-    features_by_estimator: chex.Array = field(hash=False, compare=True)
+    features_by_estimator: jax.Array = field(hash=False, compare=True)
     # do not use repr because long
-    path_identifier_list: chex.Array = field(hash=False, compare=True, repr=False)
-    internal_node_index_list: chex.Array = field(hash=False, compare=True, repr=False)
+    path_identifier_list: jax.Array = field(hash=False, compare=True, repr=False)
+    internal_node_index_list: jax.Array = field(hash=False, compare=True, repr=False)
 
     def __hash__(self) -> int:
         if self._hash is None:  # type: ignore
@@ -58,7 +58,6 @@ class Indices:
             and jnp.array_equal(self.path_identifier_list, other.path_identifier_list).item()
             and jnp.array_equal(self.internal_node_index_list, other.internal_node_index_list).item()
         )
-        breakpoint()
         return out
 
 
@@ -179,7 +178,9 @@ class SYMPOL_RL:
 
     # NEW: # XXX can indices be static?
     @partial(jax.jit, static_argnames=("indices",))
-    def apply(self, params: Mapping, inputs: jax.Array, indices: dict) -> tuple[jax.Array, jax.Array] | jax.Array:
+    def apply(
+        self, params: Mapping, inputs: jax.Array, indices: dict | Indices
+    ) -> tuple[jax.Array, jax.Array] | jax.Array:
         split_values = params["split_values"]
         estimator_weights = params["estimator_weights"]
         split_index_array = params["split_idx_array"]

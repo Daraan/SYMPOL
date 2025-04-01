@@ -4,26 +4,27 @@ from collections.abc import Hashable
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
-from frozendict import frozendict
 import jax
 import jax.numpy as jnp
 import numpy as np
+from frozendict import frozendict
 
 from utils.get_action_and_value import get_action_and_value2
 from utils.utils import ActorTrainState
 
 if TYPE_CHECKING:
-    from config_types.args_types import CLIArgs
     import chex
     import numpy as np
     from numpy.typing import NDArray
 
+    from config_types.args_types import CLIArgs
     from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
+    from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
     from sympol import SYMPOL_RL
     from utils.utils import Storage, TrainState
 
-    _Actor = Actor_MLP | Actor_MLP_Continuous | Actor_SDT | SYMPOL_RL
+    _Actor = PureJaxModelProtocol | Actor_MLP | Actor_MLP_Continuous | Actor_SDT | SYMPOL_RL
     _Critic = Critic_MLP | Critic_SDT
 
     # keep signature complete
@@ -49,7 +50,7 @@ def _compute_gae_once(
 def compute_gae(
     critic_state: TrainState,
     next_obs: np.ndarray,
-    next_done: NDArray[np.bool_],
+    next_done: NDArray[np.bool_] | jnp.ndarray,
     storage: Storage,
     *,
     critic: _Critic,
@@ -59,10 +60,11 @@ def compute_gae(
     compute_gae_once = partial(_compute_gae_once, gamma=args.gamma, gae_lambda=args.gae_lambda)
     next_value = critic.apply(critic_state.params, next_obs).squeeze()  # pyright: ignore[reportAttributeAccessIssue]
     if args.n_envs <= 1:  # add batch dimension
-        next_value = next_value[None]
+        next_value = next_value[jnp.newaxis]
     advantages = jnp.zeros((args.n_envs,))
-    dones = jnp.concatenate([storage.dones, next_done[None, :]], axis=0)
-    values = jnp.concatenate([storage.values, next_value[None, :]], axis=0)
+    # turn back to
+    dones = jnp.concatenate([storage.dones, next_done[jnp.newaxis]], axis=0)
+    values = jnp.concatenate([storage.values, next_value[jnp.newaxis]], axis=0)
     _, advantages = jax.lax.scan(
         compute_gae_once, advantages, (dones[1:], values[1:], values[:-1], storage.rewards), reverse=True
     )

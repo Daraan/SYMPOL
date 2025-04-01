@@ -20,11 +20,15 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
     """Sync with args.actor"""
 
+    seed: int = 42
+    # FIXME: Why is default value not honored when parsed?
+
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
         return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
+        super().configure()
         self.add_argument(
             "--no-adamW",
             action="store_false",
@@ -50,7 +54,20 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             default=self.reduce_lr,
         )
 
+    # overwritten by dataclass from CLI Args
+    def __setattr__(self, name, value) -> None:  # use a better __setstate__
+        if name == "use_comet_offline":
+            return  # a property
+        super().__setattr__(name, value)
+
     def process_args(self) -> None:
+        if self.seed is None:
+            # FIXME: Why is default value not honored when parsed?
+            # Is whole DefaultArgumentParser not used?
+            self.seed = type(self).seed
+        assert self.comet == "on"
+        assert self.n_envs == 1
+        assert self.num_jobs == 2
         self._process_args_sympol()
         self._process_args_ray_utilities()
         assert self.agent_type == self.actor
@@ -64,7 +81,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
 
     def _process_args_ray_utilities(self) -> None:
         """Make CLIArgs compatible with DefaultArgumentParser"""
-        self.episodes = self.total_steps
+        # self.episodes = int(self.total_steps / self.n_envs / self.minibatch_size)
         self.env_type = self.env_id
         self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
         self.render_mode = "rgb_array" if self.render_env else None
