@@ -58,7 +58,8 @@ class SetupDefaults(unittest.TestCase):
         self._ENV_SAMPLE = jnp.arange(self._INPUT_LENGTH)
         model_key = jax.random.PRNGKey(self._DEFAULT_CONFIG_DICT["seed"])
         self._RANDOM_KEY, self._ACTOR_KEY, self._CRITIC_KEY = jax.random.split(model_key, 3)
-        self._ACTION_DIM = self._ACTION_SPACE.n  # type: ignore[attr-defined]
+        self._ACTION_DIM: int = self._ACTION_SPACE.n  # type: ignore[attr-defined]
+        self._OBS_DIM: int = self._OBSERVATION_SPACE.shape[0]  # pyright: ignore[reportOptionalSubscript]
 
     def util_test_state_equivalence(
         self, state1: TrainState | ActorTrainState | Any, state2: TrainState | ActorTrainState | Any

@@ -44,10 +44,9 @@ from utils import (
     ObservationActionBuffer,
     Storage,
     build_env,
-    convert_to_discrete_tree,
-    plot_decision_tree,
-    plot_decision_tree_soft,
 )
+from utils.trees import convert_to_discrete_tree
+from utils.trees.drawing import plot_decision_tree, plot_decision_tree_soft
 
 if TYPE_CHECKING:
     import chex
@@ -1309,15 +1308,16 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                 frames.append(np.array(image))
 
                             actor_params = actor_state.params
+                            obs = np.array([obs]).reshape(-1, obs_dim)  # might have 1 dimension too much here
                             if args.action_type == "discrete":
-                                action_logits = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
+                                action_logits = actor.apply(actor_params, obs, indices=actor_state.indices)
 
                                 action = jnp.argmax(action_logits, axis=1)  # type: ignore[arg-type]
                                 action = jnp.squeeze(
                                     action, axis=0
                                 )  # jnp.squeeze(action, axis=0) if action.shape[0] == 1 else action #action[0]
                             else:
-                                result = actor.apply(actor_params, np.array([obs]), indices=actor_state.indices)
+                                result = actor.apply(actor_params, obs, indices=actor_state.indices)
                                 action_distribution = distrax.MultivariateNormalDiag(result[0], jnp.exp(result[1]))  # pyright: ignore[reportIndexIssue, reportArgumentType]
                                 action = action_distribution.mean()
                                 action = jnp.squeeze(action, axis=0)
@@ -1336,6 +1336,8 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                                 ]
                             ):
                                 action = action_indices[action]
+                            if action.ndim == 0:
+                                action = [action.item()]
                             next_obs, rewards, done, trunc, info = temp_env.step(action)
 
                             running_reward += rewards  # type: ignore[operator]

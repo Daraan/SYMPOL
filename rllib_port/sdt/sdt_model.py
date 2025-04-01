@@ -22,6 +22,7 @@ class ActorSDTModel(StatedActorFlaxRLModel[Actor_SDT[_is_discreteT], "SDTParams"
             action_type=self.config["action_type"],
             **kwargs,
         )
+        # possibly add indices as static arg
         model.apply = jax.jit(model.apply)
         return model
 

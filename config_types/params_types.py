@@ -163,23 +163,4 @@ class SympolParams(GeneralParams):
     """Always 1"""
 
 
-class _HasActor(Protocol):
-    actor: str
-
-
-def is_sympol_params(params: GeneralParams, args: _HasActor) -> TypeGuard[SympolParams]:  # noqa: ARG001
-    """Equivalent of args.actor == "sympol"""
-    return args.actor == "sympol"
-
-
-def is_mlp_params(params: GeneralParams, args: _HasActor) -> TypeGuard[MLPParams]:  # noqa: ARG001
-    """Equivalent of args.actor in ("mlp", "stateActionDT")"""
-    return args.actor in ("mlp", "stateActionDT")
-
-
-def is_sdt_params(params: GeneralParams, args: _HasActor) -> TypeGuard[SDTParams]:  # noqa: ARG001
-    """Equivalent of args.actor in ("sdt", "d-sdt")"""
-    return args.actor in ("sdt", "d-sdt")
-
-
 ParamsDictType = TypeAliasType("ParamsDictType", MLPParams | SDTParams | SympolParams)

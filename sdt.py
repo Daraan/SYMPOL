@@ -10,6 +10,11 @@ from flax.linen.initializers import normal
 from utils import _is_discreteT
 from utils.jax_math import entmax15JAX
 
+__all__ = [
+    "Actor_SDT",
+    "Critic_SDT",
+]
+
 
 def temperature_sigmoid(x, temperature=1.0):
     """Custom sigmoid function with temperature."""

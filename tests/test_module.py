@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 import unittest
@@ -158,6 +159,105 @@ class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
             actor_out = actor_output[Columns.ACTION_DIST_INPUTS]
             o_actor_out = o_actor.apply(o_actor_state.params, self._DEFAULT_INPUT, indices=o_actor_state.indices)
             npt.assert_array_almost_equal(actor_out, o_actor_out, decimal=5)
+
+    def test_indices_frozen(self):
+        indices = SYMPOL_RL(
+            obs_dim=self._OBS_DIM,
+            action_dim=self._ACTION_DIM,
+            depth=self._DEFAULT_NAMESPACE.depth,
+            n_estimators=self._DEFAULT_NAMESPACE.n_estimators,
+            action_type=self._DEFAULT_NAMESPACE.action_type,
+            subset_fraction=0.8,
+        ).init_indices(self._ACTOR_KEY)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            indices.features_by_estimator = indices.features_by_estimator.at[-1, -1].add(1)
+
+    def test_indices_equivalence(self):
+        modelA1 = SYMPOL_RL(
+            obs_dim=self._OBS_DIM,
+            action_dim=self._ACTION_DIM,
+            depth=self._DEFAULT_NAMESPACE.depth,
+            n_estimators=self._DEFAULT_NAMESPACE.n_estimators,
+            action_type=self._DEFAULT_NAMESPACE.action_type,
+            subset_fraction=0.8,
+        )
+        modelA2 = SYMPOL_RL(
+            obs_dim=self._OBS_DIM,
+            action_dim=self._ACTION_DIM,
+            depth=self._DEFAULT_NAMESPACE.depth,
+            n_estimators=self._DEFAULT_NAMESPACE.n_estimators,
+            action_type=self._DEFAULT_NAMESPACE.action_type,
+            subset_fraction=0.8,
+        )
+
+        # Test repeated use
+        indicesA11 = modelA1.init_indices(self._ACTOR_KEY)
+        indicesA12 = modelA1.init_indices(self._ACTOR_KEY)
+        indicesA2 = modelA2.init_indices(self._ACTOR_KEY)
+        self.assertEqual(indicesA11, indicesA12)
+        self.assertEqual(hash(indicesA11), hash(indicesA12))
+        self.assertEqual(hash(indicesA11), hash(indicesA2))
+        self.assertEqual(indicesA11, indicesA2)
+
+        indicesA1_other = modelA1.init_indices(self._CRITIC_KEY)
+        self.assertNotEqual(indicesA11, indicesA1_other)
+        self.assertNotEqual(hash(indicesA11), hash(indicesA1_other))
+        # Only features are different:
+        npt.assert_array_equal(indicesA11.internal_node_index_list, indicesA1_other.internal_node_index_list)
+        npt.assert_array_equal(indicesA11.path_identifier_list, indicesA1_other.path_identifier_list)
+        with self.assertRaises(AssertionError):
+            npt.assert_array_equal(
+                indicesA11.features_by_estimator,
+                indicesA1_other.features_by_estimator,
+            )
+
+        # Meta test:
+        def _calc_selected_variable(subset_fraction):
+            if self._DEFAULT_NAMESPACE.n_estimators > 1:
+                selected_variables = int(self._OBS_DIM * subset_fraction)
+                selected_variables = min(selected_variables, 50)
+                selected_variables = max(selected_variables, 10)
+                selected_variables = min(selected_variables, self._OBS_DIM)
+                if not selected_variables * self._DEFAULT_NAMESPACE.n_estimators > 3 * self._OBS_DIM:
+                    selected_variables = self._OBS_DIM
+            else:
+                selected_variables = self._OBS_DIM
+
+        if False:
+            self.assertNotEqual(
+                _calc_selected_variable(0.8),
+                _calc_selected_variable(2.0),
+                "To get a different output, the subset fraction must be different AND n_estimators > 1!",
+            )
+            modelB = SYMPOL_RL(
+                obs_dim=self._OBS_DIM,
+                action_dim=self._ACTION_DIM,
+                depth=self._DEFAULT_NAMESPACE.depth,
+                n_estimators=self._DEFAULT_NAMESPACE.n_estimators,
+                action_type=self._DEFAULT_NAMESPACE.action_type,
+                subset_fraction=2.0,
+            )
+            # only features are affected by random key
+            indicesB = modelB.init_indices(self._ACTOR_KEY)
+            npt.assert_array_equal(indicesA11.features_by_estimator, indicesB.features_by_estimator)
+            npt.assert_array_equal(indicesA11.internal_node_index_list, indicesB.internal_node_index_list)
+
+            self.assertNotEqual(indicesA11, indicesB)
+            self.assertNotEqual(hash(indicesA11), hash(indicesB))
+
+        indicesC = SYMPOL_RL(
+            obs_dim=self._OBS_DIM,
+            action_dim=self._ACTION_DIM,
+            depth=self._DEFAULT_NAMESPACE.depth + 1,
+            n_estimators=self._DEFAULT_NAMESPACE.n_estimators,
+            action_type=self._DEFAULT_NAMESPACE.action_type,
+            subset_fraction=0.8,
+        ).init_indices(self._ACTOR_KEY)
+        self.assertNotEqual(indicesA11, indicesC)
+        self.assertNotEqual(hash(indicesA11), hash(indicesC))
+        if False:
+            self.assertNotEqual(indicesC, indicesB)
+            self.assertNotEqual(hash(indicesC), hash(indicesB))
 
 
 class TestSetup(DisableBreakpointsForGUI, SetupDefaults):

@@ -1,7 +1,8 @@
+from __future__ import annotations
+from functools import partial
 from typing import TYPE_CHECKING, Mapping
 
 # from torch.autograd import Function
-import chex
 import jax
 import jax.numpy as jnp
 from flax import struct
@@ -9,7 +10,59 @@ from flax import struct
 from utils.jax_math import entmax15JAX
 
 
-@struct.dataclass(kw_only=True, frozen=False)
+from dataclasses import dataclass, field
+
+if TYPE_CHECKING:
+    import chex
+
+
+@dataclass(kw_only=True, frozen=True, eq=False)
+class Indices:
+    """Frozen and hashable variant of the indices dict to allow using them as static_args"""
+
+    features_by_estimator: chex.Array = field(hash=False, compare=True)
+    # do not use repr because long
+    path_identifier_list: chex.Array = field(hash=False, compare=True, repr=False)
+    internal_node_index_list: chex.Array = field(hash=False, compare=True, repr=False)
+
+    def __hash__(self) -> int:
+        if self._hash is None:  # type: ignore
+            object.__setattr__(
+                self,
+                "_hash",
+                hash(
+                    (
+                        tuple(a.item() for entry in self.features_by_estimator for a in entry),
+                        tuple(a.item() for entry in self.path_identifier_list for a in entry),
+                        tuple(a.item() for entry in self.internal_node_index_list for a in entry),
+                    )
+                ),
+            )
+        return self._hash
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_hash", None)
+        if TYPE_CHECKING:
+            self._hash: int = None  # pyright: ignore
+        self.__hash__()
+
+    # backwards compatibility
+    def __getitem__(self, key: str) -> chex.Array:
+        return getattr(self, key)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Indices):
+            return NotImplemented
+        out = (
+            jnp.array_equal(self.features_by_estimator, other.features_by_estimator).item()
+            and jnp.array_equal(self.path_identifier_list, other.path_identifier_list).item()
+            and jnp.array_equal(self.internal_node_index_list, other.internal_node_index_list).item()
+        )
+        breakpoint()
+        return out
+
+
+@struct.dataclass(kw_only=True, frozen=True)
 class SYMPOL_RL:
     obs_dim: int = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
@@ -81,7 +134,7 @@ class SYMPOL_RL:
         }
         return params
 
-    def init_indices(self, random_key) -> dict[str, chex.Array]:
+    def init_indices(self, random_key) -> Indices:
         leaf_node_num = 2**self.depth
         if self.n_estimators > 1:
             selected_variables = int(self.obs_dim * self.subset_fraction)
@@ -117,16 +170,16 @@ class SYMPOL_RL:
         # jax.debug.print("path_identifier_list: {}", path_identifier_list)
         # jax.debug.print("internal_node_index_list: {}", internal_node_index_list)
 
-        indices: dict[str, chex.Array] = {
-            "features_by_estimator": features_by_estimator,
-            "path_identifier_list": path_identifier_list,
-            "internal_node_index_list": internal_node_index_list,
-        }
-
+        indices = Indices(
+            features_by_estimator=features_by_estimator,
+            path_identifier_list=path_identifier_list,
+            internal_node_index_list=internal_node_index_list,
+        )
         return indices
 
-    @jax.jit
-    def apply(self, params: Mapping, inputs: jax.Array, indices: dict):
+    # NEW: # XXX can indices be static?
+    @partial(jax.jit, static_argnames=("indices",))
+    def apply(self, params: Mapping, inputs: jax.Array, indices: dict) -> tuple[jax.Array, jax.Array] | jax.Array:
         split_values = params["split_values"]
         estimator_weights = params["estimator_weights"]
         split_index_array = params["split_idx_array"]
@@ -155,7 +208,10 @@ class SYMPOL_RL:
             jnp.argmax(split_index_array, axis=-1), num_classes=split_index_array.shape[-1]
         )
         split_index_array = split_index_array - jax.lax.stop_gradient(adjust_constant)
-        # jax.debug.print("split_index_array: {}", split_index_array)
+        # jax.debug.print("inputs: {} shape:{}", inputs[0], inputs.shape)
+        # jax.debug.print("split_index_array: {} shape:{}", split_index_array[0, 0], split_index_array.shape)
+        # jax.debug.print("X_estimator: {} shape: {}", X_estimator[0], X_estimator.shape)
+        # jax.debug.print("features_by_estimator: {} shape: {}", features_by_estimator[0], features_by_estimator.shape)
         # as split_index_array_selected is one-hot-encoded, taking the sum over the last axis after multiplication results in selecting the desired value at the index
         s1_sum = jnp.einsum("ein,ein->ei", split_values, split_index_array)
         s2_sum = jnp.einsum("ben,ein->bei", X_estimator, split_index_array)
@@ -187,7 +243,7 @@ class SYMPOL_RL:
         if self.action_type == "continuous":
             layer_output = jnp.einsum("elc,bel->bec", leaf_classes_array, p)
             layer_output = jnp.einsum("be,bec->bc", estimator_weights_leaf_softmax, layer_output)
-            result = [layer_output, log_std]
+            result = (layer_output, log_std)
         elif self.action_type == "discrete":
             layer_output = jnp.einsum("elc,bel->bec", leaf_classes_array, p)
             result = jnp.einsum("be,bec->bc", estimator_weights_leaf_softmax, layer_output)
