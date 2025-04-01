@@ -20,8 +20,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
     """Sync with args.actor"""
 
-    # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
+        # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
         return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
@@ -31,6 +31,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             dest="adamW",
             help="Do not use AdamW optimizer (explicitly sets to False)",
             required=False,
+            default=self.adamW,
         )
         self.add_argument(
             "--no-render_env",
@@ -38,6 +39,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             action="store_false",
             help="Flag to disable rendering of the environment",
             required=False,
+            default=self.render_env,
         )
         self.add_argument(
             "--no-reduce_lr",
@@ -45,6 +47,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             action="store_false",
             help="Flag to not use reduce_lr",
             required=False,
+            default=self.reduce_lr,
         )
 
     def process_args(self) -> None:
@@ -77,6 +80,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
                 explicit_args_corrected.append(some_arg)
         explicit_arg_values = {arg: getattr(self, arg) for arg in explicit_args_corrected}
 
+        no_update = True
         if self.use_best_config:
             import configs
 
@@ -88,7 +92,9 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
                         best_cfg = value["sdt"]
                     else:
                         best_cfg = value[self.actor]
+                    logger.info("--- Updating best config %s", best_cfg)
                     self.__dict__.update(best_cfg)
+                    no_update = False
                     break
                 if name == "-".join(self.env_id.lower().split("-")[:-1]):
                     if self.actor == "stateActionDT":
@@ -97,7 +103,13 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
                         best_cfg = value["sdt"]
                     else:
                         best_cfg = value[self.actor]
+                    logger.info("--- Updating best config %s", best_cfg)
                     self.__dict__.update(best_cfg)
+                    no_update = False
                     break
         if self.overwrite_explicit:
+            logger.info("--- Updating explicit args %s", explicit_arg_values)
             self.__dict__.update(explicit_arg_values)
+            no_update = False
+        if no_update:
+            logger.info(" --- No update of args ---")

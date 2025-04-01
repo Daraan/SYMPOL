@@ -19,17 +19,21 @@ class _HandleNos:
                 delattr(self, key)
 
 
+# Arguments for the command line interface
+# fields that do not affect a run should use hash=False, compare=False
+
+
 @dataclass(kw_only=True)
 class GeneralArgs(_HandleNos):
     """General arguments for the experiment."""
 
-    exp_name: str = "SYMPOL RL"
+    exp_name: str = field(default="SYMPOL RL", hash=False, compare=False)
     """Experiment name, important for wandb tracking"""
-    run_name: str = "Default"
+    run_name: str = field(default="Default", hash=False, compare=False)
     """Name for the current run"""
     device: str = field(default="cuda", hash=False, compare=False)
     """Device to use for training"""
-    track: bool = False
+    track: bool = field(default=False, hash=False, compare=False)
     """If true, initialize a wandb run and track the results"""
     seed: int = 42
     """Random seed"""
@@ -45,7 +49,7 @@ class GeneralArgs(_HandleNos):
     """Number of episodes for evaluation. The return of the evaluation is the mean of the cumulative reward across all evaluation episodes"""
     n_envs: int = 8
     """Number of environments to use for collecting data"""
-    random_trials: int = 5
+    random_trials: int = field(default=5, hash=False, compare=False)
     """Number of random trials for evaluation"""
 
 
@@ -53,11 +57,11 @@ class GeneralArgs(_HandleNos):
 class Args(_HandleNos):
     """General arguments for the SYMPOL RL experiment."""
 
-    use_best_config: bool = False
+    use_best_config: bool = field(default=False, hash=False, compare=False)
     """If true, use the already optimized config from configs.py. This might not exist yet for every environment, in this case the default values are used"""
-    checkpoint: bool = False
+    checkpoint: bool = field(default=False, hash=False, compare=False)
     """If true, render environments each time there is an evaluation"""
-    overwrite_explicit: bool = False
+    overwrite_explicit: bool = field(default=False, hash=False, compare=False)
     """Whether to overwrite explicit arguments"""
     no_adamW: bool = field(default=True, repr=False)
     """Do not use AdamW optimizer (explicitly sets to False)"""
@@ -73,11 +77,11 @@ class Args(_HandleNos):
     """Use dynamic trajectory buffer"""
     static_batch: bool = False
     """Use static batch size"""
-    path: str = "./checkpoints"
+    path: str = field(default="./checkpoints", compare=False, hash=False)
     """Path to save checkpoints"""
-    render_each_eval: bool = False
+    render_each_eval: bool = field(default=False, hash=False, compare=False)
     """If true, render environments each time there is an evaluation"""
-    no_render_env: bool = field(default=False, repr=False)
+    no_render_env: bool = field(default=False, repr=False, hash=False, compare=False)
     """Flag to disable rendering of the environment"""
     render_env: bool = True
     """Whether to render the environment"""
@@ -89,7 +93,7 @@ class Args(_HandleNos):
     """GPU Number"""
     optimize_config: bool = False
     """If true, use optuna to optimize the parameters specified in the function body of suggest_config in configs.py"""
-    n_trials: int = 100
+    n_trials: int = field(default=100, hash=False, compare=False)
     """Number of trials per optuna optimization job"""
     view_size: int = 3
     """MiniGrid view size"""
