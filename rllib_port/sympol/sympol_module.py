@@ -8,7 +8,8 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
-from ray_utilities.jax.distributions.get_distributions_mixin import RLModuleGetJaxDistributions
+from ray_utilities.jax.distributions.get_distributions_mixin import GetJaxDistributionsMixin
+from ray_utilities.jax.jax_module import JaxModule
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 from utils.get_action_and_value import get_action_and_value
@@ -29,16 +30,16 @@ if TYPE_CHECKING:
 # for a Intermediate old API to new API Module
 
 
-class StatesDict(TypedDict):
+class JaxPPOStateDict(TypedDict):
     actor: ActorTrainState
     critic: TrainState
-    module_key: chex.PRNGKey
+    module_key: int
 
 
-class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
+class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
     # torch code: which should be equivalent
-    vf: CriticSDTModel | CriticMLPModel
     pi: SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel[bool]
+    vf: CriticSDTModel | CriticMLPModel
     encoder: DummyActorCriticEncoder
     config: object
     """Deprecated: use model_config instead of config"""
@@ -68,6 +69,7 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
             model_config=cast("dict", model_config),
             catalog_class=catalog_class,
         )
+        # Calls setup
 
         self.catalog: SympolJaxPPOCatalog
         if self.inference_only:  # and self.framework == "torch":  # modified in setup()
@@ -92,7 +94,7 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
                 if target_obj is not None:
                     delattr(self, target_name)
 
-    def setup(self):
+    def setup(self) -> None:
         super().setup()
         actor = self.pi
         critic = self.vf
@@ -104,11 +106,14 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
         actor_state = actor.init_state(actor_key, sample)
         critic_state = critic.init_state(critic_key, sample)
 
-        self.states: StatesDict = {
-            ACTOR: actor_state,
-            CRITIC: critic_state,
-            "module_key": module_key,
-        }
+        self.states: JaxPPOStateDict
+        self.set_state(
+            {
+                "actor": actor_state,
+                "critic": critic_state,
+                "module_key": module_key,
+            }
+        )
 
     def to(self, device: Optional[chex.Device] = None):
         # FIXME: Implement proper device handling
@@ -136,11 +141,11 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
         encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
         model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
         if self.model_config["action_type"] != "discrete":
-            mean, log_std = model_out
+            # mean, log_std = model_out
             # TODO: Figure which return values to use
-            # if continous we need a mean and log_std for a non-categorical distribution
-            output[Columns.ACTION_DIST_INPUTS] = mean
-            output[Columns.ACTION_LOGP] = log_std
+            # if continuous we need a mean and log_std for a non-categorical distribution
+            # TODO: Columns.ACTION_LOGP
+            output[Columns.ACTION_DIST_INPUTS] = model_out
         else:
             output[Columns.ACTION_DIST_INPUTS] = model_out
         return output
@@ -156,10 +161,9 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
         encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
         model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
         if self.model_config["action_type"] != "discrete":
-            mean, log_std = model_out
+            # mean, log_std = model_out
             # TODO: Figure which return values to use
-            output[Columns.ACTION_DIST_INPUTS] = mean
-            output[Columns.ACTION_LOGP] = log_std
+            output[Columns.ACTION_DIST_INPUTS] = model_out
         else:
             output[Columns.ACTION_DIST_INPUTS] = model_out
         return output
@@ -212,11 +216,12 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
             else:
                 embeddings = self.encoder(batch)[ENCODER_OUT][CRITIC]
 
-        embeddings["state"] = self.states[CRITIC]
         # Value head. Should not be a list eve in continous case.
-        vf_out = self.vf(embeddings)  # type: ignore[arg-type]
+        vf_out = self.vf(embeddings, state=self.states["critic"])  # type: ignore[arg-type]
         vf_out = vf_out.squeeze(-1)
-        batch[Columns.VF_PREDS] = vf_out  # NEW: does not add this to batch here; but should be logged elsewhere
+        batch[Columns.VF_PREDS] = (
+            vf_out  # NEW: # TODO: rllib does not add this to batch here, why; do during learner update?  # noqa: E501
+        )
         return vf_out
 
     # endregion
@@ -253,7 +258,7 @@ class SympolPPOModule(RLModuleGetJaxDistributions, DefaultPPORLModule):
         )
         return storage, action, key
 
-    def parameters(self):
+    def parameters(self) -> tuple[jax.Array, jax.Array]:
         return self.states[ACTOR].params, self.states[CRITIC].params
 
 

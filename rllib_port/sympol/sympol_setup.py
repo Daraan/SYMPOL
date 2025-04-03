@@ -4,22 +4,23 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 import jax
-from ray_utilities import create_default_trainable
+from gymnasium.envs.registration import VectorizeMode
 
 import configs
+from ray_utilities import create_default_trainable
 from ray_utilities.config import ExperimentSetupBase
 from ray_utilities.config.create_algorithm import create_algorithm_config
-from rllib_port.connectors.env_to_module import make_env_to_module_without_numpy
-from rllib_port.connectors.module_to_env import make_jax_module_to_env_connector
 from rllib_port.extended_args import SympolArgumentParser
-from rllib_port.jax_learner import JaxPPOLearner
+from rllib_port.rllib.connectors.env_to_module import make_env_to_module_without_numpy
+from rllib_port.rllib.connectors.module_to_env import make_jax_module_to_env_connector
+from rllib_port.rllib.jax_learner import JaxPPOLearner
 from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.sympol.sympol_module import SympolPPOModule
-from gymnasium.envs.registration import VectorizeMode
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.algorithms.ppo.ppo import PPOConfig
+
     from ray_utilities.typing import TrainableReturnData
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,6 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
         config.training()
         # AlgorithmConfig Settings
         logger.info("Setting train_batch_size_per_learner to %s", cls.get_initial_batch_size(args))
-        print("Setting train_batch_size_per_learner to %s", cls.get_initial_batch_size(args))
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
             # learner_connector=make_learner_connector_without_numpy(

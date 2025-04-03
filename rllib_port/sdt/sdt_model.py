@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING
 
@@ -5,15 +7,15 @@ import jax
 
 from rllib_port.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
 from sdt import Actor_SDT, Critic_SDT
-from utils import _is_discreteT
 
 if TYPE_CHECKING:
+    from utils import _is_discreteT
     from config_types.params_types import SDTParams
 
 logger = logging.getLogger(__name__)
 
 
-class ActorSDTModel(StatedActorFlaxRLModel[Actor_SDT[_is_discreteT], "SDTParams"]):
+class ActorSDTModel(StatedActorFlaxRLModel[Actor_SDT["_is_discreteT"], "SDTParams"]):
     def _setup_model(self, action_dim: int, **kwargs) -> Actor_SDT[_is_discreteT]:
         model: Actor_SDT[_is_discreteT] = Actor_SDT(
             action_dim=action_dim,
