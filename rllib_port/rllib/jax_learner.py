@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Optional, Sequence, cast
 
 import jax
@@ -34,10 +35,11 @@ from ray.rllib.utils.typing import (
 
 from config_types.args_types import CLIArgs
 from rllib_port._sample_batch_to_storage import batch_to_storage
-from rllib_port.connectors.remove_state_from_batch import RemoveStateFromBatch
+from rllib_port.rllib.connectors.remove_state_from_batch import RemoveStateFromBatch
 from rllib_port.sympol.sympol_model import SympolRLModel
-from utils.get_action_and_value import get_action_and_value2
+from utils.get_action_and_value import get_action_and_value, get_action_and_value2
 from utils.ppo import compute_gae, update_ppo
+from ray.rllib.policy.sample_batch import MultiAgentBatch
 
 if TYPE_CHECKING:
     from collections.abc import Hashable
@@ -45,7 +47,6 @@ if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.algorithms.ppo.ppo import PPOConfig
     from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
-    from ray.rllib.policy.sample_batch import MultiAgentBatch
 
     from mlp import Critic_MLP
     from rllib_port.sympol.sympol_module import SympolPPOModule
@@ -56,6 +57,10 @@ __all__ = [
     "JaxLearner",
     "JaxPPOLearner",
 ]
+
+# FIXME: # CRITICAL - sync weights to env runner - how to.
+
+logger = logging.getLogger(__name__)
 
 
 class _TfExample(EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, ValueNetworkMixin):
@@ -122,9 +127,9 @@ class JaxLearner(Learner):
         # MAYBE NOT NEEDED
         module: SympolPPOModule = self._module[module_id]  # type: ignore[assignment]
         # likely do not need these here
-        actor_params, critic_params = self.get_parameters(module)
+        actor_params, critic_params = self.get_parameters(module)  # Re-enable this line
         # Optimizer is set in init_state
-        self._states = module.states
+        self._states = module.get_state()
 
         if False:
             self.register_optimizer(
@@ -142,6 +147,7 @@ class JaxLearner(Learner):
             )
 
     def apply_gradients(self, gradients_dict: ParamDict) -> None:
+        logger.warning("get_param_ref called which is not fully implemented")
         # critic
         critic_grads = gradients_dict["critic"]
         self._states["critic"] = self._states["critic"].apply_gradients(grads=critic_grads)
@@ -165,11 +171,13 @@ class JaxLearner(Learner):
             lambda _: actor_state.replace(grad_accum=actor_grad_accum, step=actor_state.step + 1),
             None,
         )
+        self._states["actor"] = actor_state
 
     def get_parameters(self, module: SympolPPOModule | RLModule) -> tuple[Sequence[Param], Sequence[Param]]:
         return list(module.states["actor"].params), list(module.states["critic"].params)
 
     def get_param_ref(self, param: Param) -> Hashable:
+        logger.warning("get_param_ref called which is not fully implemented")
         return param
 
     # FIXME
@@ -178,6 +186,7 @@ class JaxLearner(Learner):
 
     def _convert_batch_type(self, batch: MultiAgentBatch) -> MultiAgentBatch:
         # TODO: put on device
+        logger.warning("_convert_batch_type called which is not fully implemented")
         length = max(len(b) for b in batch.values())
         batch = MultiAgentBatch(batch, env_steps=length)
         return batch
@@ -203,6 +212,9 @@ class JaxLearner(Learner):
     def _set_optimizer_lr(optimizer: Optimizer, lr: float) -> None:
         super(JaxLearner)._set_optimizer_lr(optimizer, lr)
 
+    def _get_optimizer_state(self, *args, **kwargs):
+        return super()._get_optimizer_state(*args, **kwargs)
+
 
 class JaxPPOLearner(RayPPOLearner, JaxLearner):
     def build(self, **kwargs) -> None:
@@ -226,7 +238,8 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                 if idx >= 0:
                     con = cast("GeneralAdvantageEstimation", self._learner_connector.connectors[idx])
                     con._numpy_to_tensor_connector = _NoTensorConverter()  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]
-            self._learner_connector.append(RemoveStateFromBatch())
+            # not needed anymore; state passed to self.vf(obs, state=state)
+            # self._learner_connector.append(RemoveStateFromBatch())
 
     def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
         """
@@ -245,7 +258,9 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         # FIXME
         # get them from somewhere else?
         self.metrics.activate_tensor_mode()
-        fwd_out = self.module.forward_train(batch)
+        # fwd_out = self.module.forward_train(batch)
+        fwd_out = dict.fromkeys(batch.keys(), None)
+
         # Use compute_losses for whole module
         if 0:
             loss_per_module = self.compute_losses(fwd_out=fwd_out, batch=batch)
@@ -254,7 +269,6 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         # However that makes less use of jit:
 
         loss_per_module = dict.fromkeys(batch.keys(), None)
-        fwd_out = dict.fromkeys(batch.keys(), None)
         if 0:
             fwd_out = {
                 mid: self.module._rl_modules[mid]._forward_train(batch[mid], **kwargs)
@@ -264,8 +278,8 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         for module_id, module_batch in batch.items():
             # Length of the batch entries is minibatch size
             # keys liekely embeddings and "action_dist_inputs"
+            # variables:
             module: SympolPPOModule = self.module[module_id]
-
             actor_state: ActorTrainState = module.states["actor"]
             critic_state: TrainState = self._states["critic"]
             actor = module.pi.model
@@ -274,37 +288,67 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             args: CLIArgs = CLIArgs(**{k: v for k, v in module.model_config.items() if k in CLIArgs.__annotations__})  # pyright: ignore[reportArgumentType]
             args.n_envs = 1
             self._rng_key, key = jax.random.split(self._rng_key)
-            #
-            next_obs = module_batch[Columns.OBS][-1][jnp.newaxis]
-            next_done = jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS])[-1][
-                jnp.newaxis
-            ]
-            # storage, action, key = module.get_action_and_value(next_obs, next_done, key, step=0)
+            next_obs = module_batch[Columns.OBS]
+            next_done = jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS])
 
-            # TODO: Need values from actions; but value into batch
-            # returns = advantages + values
-            # rlllib: advantages = module_value_targets - module_vf_preds
-            # => returns = advantages + module_vf_preds = module_value_targets
             storage = batch_to_storage(
                 module_batch,
                 advantages=None and module_batch[Columns.ADVANTAGES],
                 values=None and module_batch[Columns.VF_PREDS],
                 returns=None and module_batch[Columns.VALUE_TARGETS],
             )
+
+            def print_values(msg):
+                return
+                print("Storage", msg, storage.values.shape, ":\n", storage.values[jnp.array([0, -1])])
+
+            print_values("initial")
+            if False:
+                for i, (next_obs, next_done) in enumerate(
+                    zip(
+                        module_batch[Columns.OBS],
+                        jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS]),
+                    )
+                ):
+                    storage, action, key = get_action_and_value(
+                        actor_state.params,
+                        critic_state,
+                        next_obs,
+                        next_done,
+                        storage,
+                        i,
+                        key,
+                        action_type=args.action_type,
+                        actor=actor,
+                        critic=critic,
+                        actor_state_indices=actor_state.indices,
+                    )
+
+                # storage, action, key = module.get_action_and_value(next_obs, next_done, key, step=0)
+
+                # TODO: Need values from actions; but value into batch
+                # returns = advantages + values
+                # rlllib: advantages = module_value_targets - module_vf_preds
+                # => returns = advantages + module_vf_preds = module_value_targets
+
+                # NOTE: Alternatively remove the Gae connector and compute critic output and gae here.
+                # In original code, next_obs, next_done are the outputs of the n_envs, e.g. length 8
+
+                print_values("after rollout")
+                storage = compute_gae(critic_state, next_obs, next_done, storage, critic=critic, args=args)
+                print_values("with gae")
+
             storage2 = batch_to_storage(
                 module_batch,
                 advantages=module_batch[Columns.ADVANTAGES],
                 values=module_batch[Columns.VF_PREDS],
                 returns=module_batch[Columns.VALUE_TARGETS],
             )
-            # NOTE: Alternatively remove the Gae connector and compute critic output and gae here.
-            # In original code, next_obs, next_done are the outputs of the n_envs, e.g. length 8
-            storage = compute_gae(critic_state, next_obs, next_done, storage, critic=critic, args=args)
 
             actor_state, critic_state, loss, policy_loss, v_loss, entropy_loss, approx_kl, key = update_ppo(
                 actor_state,
                 critic_state,
-                storage,
+                storage2,
                 key,
                 self._accumulate_gradients_every,
                 minibatch_size=self.config.minibatch_size,  # pyright: ignore[reportArgumentType]
@@ -314,6 +358,11 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                 critic=critic,
                 actor_state_indices=actor_state.indices,
             )
+            print_values("final")
+            # Update states
+            module.states["actor"] = actor_state
+            module.states["critic"] = critic_state
+            module.states["module_key"] = key
             loss_per_module[module_id] = loss.mean()
         if 0:
             PPOTorchLearner.compute_loss_for_module

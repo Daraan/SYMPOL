@@ -1,5 +1,5 @@
 import logging
-from typing import Literal
+from typing import Any, Dict, Literal
 
 from typing_extensions import Self
 
@@ -55,19 +55,20 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         )
 
     # overwritten by dataclass from CLI Args
-    def __setattr__(self, name, value) -> None:  # use a better __setstate__
+    def __setattr__XX(self, name, value) -> None:  # use a better __setstate__
         if name == "use_comet_offline":
             return  # a property
         super().__setattr__(name, value)
+
+    def __setstate__(self, d: Dict[str, Any]) -> None:
+        d.pop("use_comet_offline", None)  # do not set property
+        return super().__setstate__(d)
 
     def process_args(self) -> None:
         if self.seed is None:
             # FIXME: Why is default value not honored when parsed?
             # Is whole DefaultArgumentParser not used?
             self.seed = type(self).seed
-        assert self.comet == "on"
-        assert self.n_envs == 1
-        assert self.num_jobs == 2
         self._process_args_sympol()
         self._process_args_ray_utilities()
         assert self.agent_type == self.actor
@@ -129,4 +130,4 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             self.__dict__.update(explicit_arg_values)
             no_update = False
         if no_update:
-            logger.info(" --- No update of args ---")
+            logger.debug(" --- No update of args ---")

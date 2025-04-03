@@ -30,7 +30,7 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-from rllib_port.connectors.debug_connector import DebugConnector
+from rllib_port.rllib.connectors.debug_connector import DebugConnector
 
 
 if TYPE_CHECKING:
@@ -82,13 +82,13 @@ def _default_env_to_module_without_numpy(
                 rl_module_specs=(
                     algo.rl_module_spec.rl_module_specs
                     if isinstance(algo.rl_module_spec, MultiRLModuleSpec)
-                    else set(algo.policies)  # pyright: ignore[reportArgumentsType] # old api
+                    else set(algo.policies)  # pyright: ignore[reportArgumentType] # old api
                 ),
                 agent_to_module_mapping_fn=algo.policy_mapping_fn,
             )
         )
     # Batch all data.
-    pipeline.append(BatchIndividualItems(algo.is_multi_agent))
+    pipeline.append(BatchIndividualItems(multi_agent=algo.is_multi_agent))
     # Convert to Tensors.
     # pipeline.append(NumpyToTensor(device=device))
     if debug:

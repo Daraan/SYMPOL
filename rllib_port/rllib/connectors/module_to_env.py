@@ -8,30 +8,27 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
-from rllib_port.connectors.debug_connector import DebugConnector
-from rllib_port.connectors.get_actions import GetActionsJaxDistr
+from rllib_port.rllib.connectors.debug_connector import DebugConnector
+from rllib_port.rllib.connectors.get_actions import GetActionsJaxDistr
 
 
 if TYPE_CHECKING:
     import chex
     from utils.utils import EnvType
-    import gymnasium as gym
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.connectors.connector_v2 import ConnectorV2
     from ray.rllib.core.rl_module.rl_module import RLModule
 
 
 def _jax_module_to_env_connector(
-    env: gym.Env, rl_module=None, *, key: chex.PRNGKey, algo: AlgorithmConfig, debug=False
+    env: EnvType, rl_module=None, *, key: chex.PRNGKey, algo: AlgorithmConfig, debug=False
 ) -> list["ConnectorV2"]:  # noqa: ARG001
     # NOTE: rl_module might not be used
     from ray.rllib.connectors.module_to_env import (
         ListifyDataForVectorEnv,
         ModuleToAgentUnmapping,
-        ModuleToEnvPipeline,
         NormalizeAndClipActions,
         RemoveSingleTsTimeRankFromBatch,
-        TensorToNumpy,
         UnBatchToIndividualItems,
     )
 

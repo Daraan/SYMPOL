@@ -20,8 +20,8 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
-from rllib_port.connectors.debug_connector import DebugConnector
-from rllib_port.jax_learner import _NoTensorConverter
+from rllib_port.rllib.connectors.debug_connector import DebugConnector
+from rllib_port.rllib.jax_learner import _NoTensorConverter
 from ray.rllib.connectors.learner import (
     AddOneTsToEpisodesAndTruncate,
     GeneralAdvantageEstimation,
