@@ -1,8 +1,9 @@
+from __future__ import annotations
 import sys
 import unittest
 from dataclasses import asdict
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Collection
 from unittest import mock
 
 import tree
@@ -15,6 +16,7 @@ from typing_extensions import NotRequired, Required, get_origin, get_type_hints
 
 from config_types.args_types import CLIArgs
 from mlp import Actor_MLP, Critic_MLP
+from rllib_port.sympol.sympol_setup import SympolSetup
 from sdt import Actor_SDT, Critic_SDT
 from sympol import SYMPOL_RL
 from utils.utils import ActorTrainState, TrainState
@@ -63,26 +65,37 @@ class SetupDefaults(unittest.TestCase):
         self._OBS_DIM: int = self._OBSERVATION_SPACE.shape[0]  # pyright: ignore[reportOptionalSubscript]
 
     def util_test_state_equivalence(
-        self, state1: TrainState | ActorTrainState | Any, state2: TrainState | ActorTrainState | Any
+        self,
+        state1: TrainState | ActorTrainState | Any,
+        state2: TrainState | ActorTrainState | Any,
+        msg="",
+        *,
+        ignore: Collection[str] = (),
     ):
         """Check if two states are equivalent."""
         # Check if the parameters and indices are equal
+        if isinstance(ignore, str):
+            ignore = {ignore}
+        else:
+            ignore = set(ignore)
 
         for attr in ["params", "indices", "grad_accum", "opt_state"]:
-            with self.subTest(msg=attr):
+            if attr in ignore:
+                continue
+            with self.subTest(msg=msg, attr=attr):
                 val1 = getattr(state1, attr, None)
                 val2 = getattr(state2, attr, None)
-                self.assertEqual(val1 is not None, val2 is not None, f"Attribute {attr} not found in both states")
+                self.assertEqual(val1 is not None, val2 is not None, f"Attribute {attr} not found in both states {msg}")
                 if val1 is None and val2 is None:
                     continue
                 flat1 = tree.flatten(val1)
                 flat_params2 = tree.flatten(val2)
                 tree.assert_same_structure(flat1, flat_params2)
                 for p1, p2 in zip(flat1, flat_params2):
-                    npt.assert_array_equal(p1, p2)
+                    npt.assert_array_equal(p1, p2, err_msg=f"Attribute '{attr}' not equal in both states {msg}")
 
         # Check if the other attributes are equal
-        for attr in set(dir(state1) + dir(state2)):
+        for attr in set(dir(state1) + dir(state2)) - ignore:
             if not attr.startswith("_") and attr not in [
                 "params",
                 "indices",
@@ -94,12 +107,16 @@ class SetupDefaults(unittest.TestCase):
             ]:
                 val1 = getattr(state1, attr, None)
                 val2 = getattr(state2, attr, None)
-                self.assertEqual(val1 is not None, val2 is not None, f"Attribute {attr} not found in both states")
+                self.assertEqual(
+                    val1 is not None, val2 is not None, f"Attribute '{attr}' not found in both states {msg}"
+                )
                 comp = val1 == val2
                 if isinstance(comp, bool):
-                    self.assertTrue(comp, f"Attribute {attr} not equal in both states: {val1}\n!=\n{val2}")
+                    self.assertTrue(comp, f"Attribute '{attr}' not equal in both states: {val1}\n!=\n{val2}\n{msg}")
                 else:
-                    self.assertTrue(comp.all(), f"Attribute {attr} not equal in both states: {val1}\n!=\n{val2}")
+                    self.assertTrue(
+                        comp.all(), f"Attribute '{attr}' not equal in both states: {val1}\n!=\n{val2}\n{msg}"
+                    )
 
         # NOTE: Apply gradients modifies state
 
