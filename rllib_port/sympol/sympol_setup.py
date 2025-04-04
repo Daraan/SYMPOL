@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 import jax
-from gymnasium.envs.registration import VectorizeMode
+from ray import tune
 
 import configs
 from ray_utilities import create_default_trainable
@@ -27,13 +27,15 @@ logger = logging.getLogger(__name__)
 
 
 class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
-    @property
-    def project_name(self) -> str:
-        return "sympol"
+    PROJECT = "SYMPOL"
 
     @property
     def group_name(self) -> str:
-        return "sympol"
+        agent_type = self.args.agent_type
+        if agent_type.lower() == "mlp":
+            # multiple mlp variants exist
+            agent_type = f"{agent_type}({self.PROJECT})"
+        return "_".join([agent_type, self.args.env_type, ("-test" if self.args.test else "")])
 
     @property
     def model_identifier(self) -> str:
@@ -52,6 +54,8 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
     def _create_config(self):
         return self.config_from_args(self.args)
 
+    N_STEPS_DEFAULT = 512
+
     @staticmethod
     def get_minibatch_size(args):
         # if trial sample this
@@ -65,13 +69,11 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             n_steps = args.n_steps
         if args.dynamic_buffer:
             n_steps = max(16, n_steps // 8)
-        batch_size = int(n_envs * n_steps)
-        minibatch_size: int = args.minibatch_size
+        batch_size = args.minibatch_size  # legacy setup has this amount steps per learner pass
+        minibatch_size: int = 128  # args.minibatch_size
         while batch_size // minibatch_size < 2:
             minibatch_size = minibatch_size // 2
         return minibatch_size
-
-    N_STEPS_DEFAULT = 128
 
     @staticmethod
     def get_initial_batch_size(args):
@@ -114,25 +116,43 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
                 key=jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "module_to_env_connector"))),
                 debug=False,
             ),
-            # experimental
-            # gym_env_vectorize_mode=VectorizeMode.ASYNC,
+            num_envs_per_env_runner=3,  # env_context.vector_index
+            num_env_runners=4,  # env_context.worker_index
+            num_cpus_per_env_runner=2,
         )
         # training settings
         # PPO settings
-        config.training()
+        config.training(
+            # LEGACY
+            num_epochs=1,  # passes over the batch_size data; handled by update_ppo
+        )
+        # FIXME: Evaluation currently slow
+        config.evaluation(evaluation_interval=20, evaluation_num_env_runners=1)
         # AlgorithmConfig Settings
-        logger.info("Setting train_batch_size_per_learner to %s", cls.get_initial_batch_size(args))
+        logger.info(
+            "Setting train_batch_size_per_learner to %s, suggestion %s",
+            args.train_batch_size_per_learner,
+            cls.get_initial_batch_size(args),
+        )
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
             # learner_connector=make_learner_connector_without_numpy(
             #    config, debug=False
             # ),  # ray has wrong annotation here
             learner_class=JaxPPOLearner,
-            minibatch_size=cls.get_minibatch_size(args),
-            train_batch_size_per_learner=cls.get_initial_batch_size(args),
+            # This is the size the learner receives per _update
+            # Legacy minibatches are done in the learner
+            minibatch_size=args.train_batch_size_per_learner,
+            train_batch_size_per_learner=args.train_batch_size_per_learner,
             learner_config_dict={
-                "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner")))
+                "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
+                "legacy_minibatch_size": args.minibatch_size,
             },
+        )
+        logger.info(
+            "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",
+            args.minibatch_size,
+            cls.get_minibatch_size(args),
         )
         if 0:
             cast("AlgorithmConfig", config).training(
@@ -145,9 +165,10 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
     def create_trainable(self) -> Callable[[dict[str, Any]], TrainableReturnData]:
         return create_default_trainable(setup=self, setup_class=type(self))
 
-    def create_param_space(self, trial=None):
+    def create_param_space(self, trial=None) -> dict[str, Any]:
         # FIXME
         param_space_for_tune = super().create_param_space()
+        param_space_for_tune["run_seed"] = tune.randint(0, 2**16)
         if not trial:
             return param_space_for_tune
         args = self.args

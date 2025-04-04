@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, TypedDict, Union, cast
 
 import jax
-from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
+
+try:
+    from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
+except ModuleNotFoundError:
+    # Refactoring of ray
+    from ray.rllib.algorithms.ppo.ppo_rl_module import PPORLModule as DefaultPPORLModule  # pyright: ignore[reportPrivateImportUsage]
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI

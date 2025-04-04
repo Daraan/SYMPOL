@@ -27,16 +27,20 @@ The default env-to-module connector pipeline is:
 """
 
 from __future__ import annotations
+
+import logging
 from functools import partial
 from typing import TYPE_CHECKING
 
 from rllib_port.rllib.connectors.debug_connector import DebugConnector
 
-
 if TYPE_CHECKING:
-    from utils.utils import EnvType
-    from ray.rllib.connectors.connector_v2 import ConnectorV2
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
+    from ray.rllib.connectors.connector_v2 import ConnectorV2
+
+    from utils.utils import EnvType
+
+logger = logging.getLogger(__name__)
 
 
 def _default_env_to_module_without_numpy(
@@ -57,7 +61,6 @@ def _default_env_to_module_without_numpy(
     from ray.rllib.connectors.env_to_module import (
         AddObservationsFromEpisodesToBatch,
         AddStatesFromEpisodesToBatch,
-        AddTimeDimToBatchAndZeroPad,
         AgentToModuleMapping,
         BatchIndividualItems,
         # EnvToModulePipeline,
@@ -70,7 +73,14 @@ def _default_env_to_module_without_numpy(
     # Append OBS handling.
     pipeline.append(AddObservationsFromEpisodesToBatch())  # <-- extracts episodes obs to batch
     # Append time-rank handler.
-    pipeline.append(AddTimeDimToBatchAndZeroPad())
+    try:
+        from ray.rllib.connectors.env_to_module import AddTimeDimToBatchAndZeroPad
+    except ImportError:
+        logger.error(
+            "AddTimeDimToBatchAndZeroPad not found on current ray version. This might lead to a broken pipeline"
+        )
+    else:
+        pipeline.append(AddTimeDimToBatchAndZeroPad())
     # Append STATE_IN/STATE_OUT handler.
     pipeline.append(AddStatesFromEpisodesToBatch())
     # If multi-agent -> Map from AgentID-based data to ModuleID based data.

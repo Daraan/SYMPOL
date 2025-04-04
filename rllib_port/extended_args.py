@@ -20,15 +20,20 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
     """Sync with args.actor"""
 
+    train_batch_size_per_learner: int = 4096  # batch size that ray samples
+
     seed: int = 42
     # FIXME: Why is default value not honored when parsed?
 
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
+        # FIXME # CRITICAL does not update args that are registered in it
         return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
         super().configure()
+        self.add_argument("--batch_size", dest="train_batch_size_per_learner", type=int, required=False)
+
         self.add_argument(
             "--no-adamW",
             action="store_false",
@@ -86,8 +91,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         self.env_type = self.env_id
         self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
         self.render_mode = "rgb_array" if self.render_env else None
-        self.wandb = "offline+upload" if self.track else False
-        self.comet = "offline+upload" if self.track else False
+        # self.wandb = "offline+upload" if self.track else False
+        # self.comet = "offline+upload" if self.track else False
 
     def _process_args_sympol(self) -> None:
         explicit_args_corrected = []
@@ -129,5 +134,12 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             logger.info("--- Updating explicit args %s", explicit_arg_values)
             self.__dict__.update(explicit_arg_values)
             no_update = False
+        else:
+            # update at least own and super args
+            logger.info("--- Updating explicit args %s not in CLIArgs", explicit_arg_values)
+            self.__dict__.update(
+                {k: v for k, v in explicit_arg_values.items() if k not in CLIArgs.__dataclass_fields__}
+            )
+
         if no_update:
             logger.debug(" --- No update of args ---")

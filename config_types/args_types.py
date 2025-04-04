@@ -61,7 +61,9 @@ class Args(_HandleNos):
     """If true, use the already optimized config from configs.py. This might not exist yet for every environment, in this case the default values are used"""
     checkpoint: bool = field(default=False, hash=False, compare=False)
     """If true, render environments each time there is an evaluation"""
-    overwrite_explicit: bool = field(default=False, hash=False, compare=False)
+    overwrite_explicit: bool = field(
+        default=True, hash=False, compare=False
+    )  # NEW # NOTE: Different from default; change back when sure that Tap parsing arguments are passed on
     """Whether to overwrite explicit arguments"""
     no_adamW: bool = field(default=True, repr=False)
     """Do not use AdamW optimizer (explicitly sets to False)"""

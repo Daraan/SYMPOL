@@ -74,6 +74,10 @@ class ActorTrainState(TrainState):
     # possibly use: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
 
 
+def format_array(arr) -> str:
+    return f"{arr[:2]}\n ...\n{arr[-2:]}" if arr.size > 4 else str(arr)
+
+
 @flax.struct.dataclass
 class Storage:
     obs: jnp.ndarray
@@ -84,6 +88,40 @@ class Storage:
     advantages: jnp.ndarray
     returns: jnp.ndarray
     rewards: jnp.ndarray
+
+    def __str__(self) -> str:
+        try:
+            return (
+                f"Storage(\n"
+                f"obs {self.obs.shape}={format_array(self.obs)},\n"
+                f"actions {self.actions.shape}={format_array(self.actions)},\n"
+                f"logprobs {self.logprobs.shape}={format_array(self.logprobs)},\n"
+                f"dones {self.dones.shape}={format_array(self.dones)},\n"
+                f"values {self.values.shape}={format_array(self.values)},\n"
+                f"advantages {self.advantages.shape}={format_array(self.advantages)},\n"
+                f"returns {self.returns.shape}={format_array(self.returns)},\n"
+                f"rewards {self.rewards.shape}={format_array(self.rewards)}\n"
+                f")"
+            )
+        except Exception as e:  # noqa: BLE001
+            return f"Error in __repr__: {e!s}" + super().__repr__()
+
+    def __repr__(self) -> str:
+        try:
+            return (
+                f"Storage(\n"
+                f"obs={format_array(self.obs)},\n"
+                f"actions={format_array(self.actions)},\n"
+                f"logprobs={format_array(self.logprobs)},\n"
+                f"dones={format_array(self.dones)},\n"
+                f"values={format_array(self.values)},\n"
+                f"advantages={format_array(self.advantages)},\n"
+                f"returns={format_array(self.returns)},\n"
+                f"rewards={format_array(self.rewards)}\n"
+                f")"
+            )
+        except Exception as e:  # noqa: BLE001
+            return f"Error in __repr__: {e!s}" + super().__repr__()
 
     if TYPE_CHECKING:  # added by flax.struct.dataclass
 

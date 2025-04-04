@@ -1,10 +1,14 @@
 import sys
+from typing import TYPE_CHECKING
 from unittest import mock
 
 from rllib_port.sympol.sympol_module import SympolPPOModule
 from rllib_port.sympol.sympol_setup import SympolSetup
 from tests._test_utils import SetupDefaults
 from utils.envs import build_env
+
+if TYPE_CHECKING:
+    from ray.rllib.algorithms.ppo import PPOConfig
 
 
 class TestTraining(SetupDefaults):
