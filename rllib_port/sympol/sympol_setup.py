@@ -92,6 +92,15 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
         return batch_size
 
     @classmethod
+    def apply_legacy_settings(cls, config: AlgorithmConfig | PPOConfig, args: SympolArgumentParser) -> None:
+        config.training(
+            num_epochs=1,  # passes over the batch_size data; handled by update_ppo
+            learner_config_dict={"legacy_minibatch_size": args.minibatch_size},
+            minibatch_size=args.train_batch_size_per_learner,
+            train_batch_size_per_learner=args.train_batch_size_per_learner,
+        )
+
+    @classmethod
     def config_from_args(cls, args):
         config, _spec = create_algorithm_config(
             args,
@@ -104,36 +113,24 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
         )
         # NOTE: Incomplete automcompletion kwargs -> super()
         # Algorithm settings
-        DEBUG_CONNECTORS = True
-        if args.seed is None:
-            args.seed = SympolArgumentParser.seed
+        DEBUG_CONNECTORS = {"env_to_module": False, "module_to_env": False, "learner": False}
         config.env_runners(
+            # env -> module
             add_default_connectors_to_env_to_module_pipeline=False,
-            env_to_module_connector=make_env_to_module_without_numpy(config, debug=False),
+            env_to_module_connector=make_env_to_module_without_numpy(config, debug=DEBUG_CONNECTORS["env_to_module"]),
+            # module -> env
             add_default_connectors_to_module_to_env_pipeline=False,
             module_to_env_connector=make_jax_module_to_env_connector(
                 config,
                 key=jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "module_to_env_connector"))),
-                debug=False,
+                debug=DEBUG_CONNECTORS["module_to_env"],
             ),
+            # TODO: Should set this in the defaults of the submodule
             num_envs_per_env_runner=3,  # env_context.vector_index
             num_env_runners=4,  # env_context.worker_index
             num_cpus_per_env_runner=2,
         )
         # training settings
-        # PPO settings
-        config.training(
-            # LEGACY
-            num_epochs=1,  # passes over the batch_size data; handled by update_ppo
-        )
-        # FIXME: Evaluation currently slow
-        config.evaluation(evaluation_interval=20, evaluation_num_env_runners=1)
-        # AlgorithmConfig Settings
-        logger.info(
-            "Setting train_batch_size_per_learner to %s, suggestion %s",
-            args.train_batch_size_per_learner,
-            cls.get_initial_batch_size(args),
-        )
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
             # learner_connector=make_learner_connector_without_numpy(
@@ -142,31 +139,32 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             learner_class=JaxPPOLearner,
             # This is the size the learner receives per _update
             # Legacy minibatches are done in the learner
-            minibatch_size=args.train_batch_size_per_learner,
-            train_batch_size_per_learner=args.train_batch_size_per_learner,
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
-                "legacy_minibatch_size": args.minibatch_size,
+                "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
             },
         )
+        # PPO specific training settings
+        # config.training()
+        if args.legacy:
+            logger.debug("Using legacy implementation")
+            cls.apply_legacy_settings(config, args)
+        # logging
         logger.info(
             "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",
             args.minibatch_size,
             cls.get_minibatch_size(args),
         )
-        if 0:
-            cast("AlgorithmConfig", config).training(
-                learner_config_dict={},
-                optimizer=...,
-                add_default_connectors_to_learner_pipeline=True,  # maybe false
-            )
+        if args.seed is None:
+            logger.warning("Args seed is None")
+            args.seed = SympolArgumentParser.seed
         return config
 
     def create_trainable(self) -> Callable[[dict[str, Any]], TrainableReturnData]:
         return create_default_trainable(setup=self, setup_class=type(self))
 
     def create_param_space(self, trial=None) -> dict[str, Any]:
-        # FIXME
+        # FIXME use tune
         param_space_for_tune = super().create_param_space()
         param_space_for_tune["run_seed"] = tune.randint(0, 2**16)
         if not trial:

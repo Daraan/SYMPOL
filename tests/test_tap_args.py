@@ -1,3 +1,4 @@
+from typing import Any
 import unittest
 import unittest.mock
 
@@ -78,11 +79,17 @@ class TestArgContents(unittest.TestCase):
 
     @clean_args
     def test_equivalence_tap(self):
+        """
+        NOTE: This test is runtime dependent on the order of execution of the attributes
+
+        As it is NOT deterministic this test could pass or fail.
+        e.g. if adamW; no_adamW is False
+        """
         parser = SympolArgumentParser()
         args = parser.parse_args()
         # CLIArgs <= SympolArgumentParser
         self.assertFalse(CLIArgs().adamW)
-        self.assertFalse(args.adamW)  # why is this True
+        self.assertFalse(args.adamW)
         self.assertDictEqual(
             {k: v for k, v in args.as_dict().items() if k in _default_args_dict},
             _default_args_dict,
@@ -164,6 +171,46 @@ class TestArgContents(unittest.TestCase):
                 getattr(dc, attr),
                 f"Attribute {attr} is different in args and CLIArgs, {getattr(old_args, attr)} != {getattr(dc, attr)}",
             )
+
+    @clean_args
+    def test_argument_defaults(self):
+        parser = SympolArgumentParser()
+        arguments: dict[str, tuple[tuple[str, ...], dict[str, Any]]] = parser.argument_buffer
+        args = parser.parse_args()
+        # Manually set arguments
+        for k, (_, settings) in arguments.items():
+            if k == "help":
+                continue
+            if k.startswith("no_"):
+                # ignore no_arguments for now; they should not be used directly;
+                # however they might fail these tests
+                continue
+            # Check if the default value is set correctly
+            # Postprocessed arguments
+            if k == "batch_size":
+                continue  # dest is train_batch_size_per_learner
+            if k == "render_mode":
+                self.assertEqual(args.render_mode, "rgb_array" if args.render_env else None)
+            elif k == "env_type":
+                self.assertEqual(args.env_type, args.env_id)
+            elif k == "agent_type":
+                self.assertEqual(args.agent_type, args.actor)
+            # Compare args:
+            # Check if all default values are set
+            # If a value does not match it could be a problem with the default value overwritten in configure()
+            else:
+                self.assertEqual(getattr(args, k), getattr(parser, k), f"Default value for {k} is not set correctly.")
+                if "default" in settings:
+                    self.assertEqual(
+                        getattr(args, k), settings["default"], f"Default value for {k} is not set correctly."
+                    )
+        for field in args.__dataclass_fields__.values():
+            if field.default is not None and field.default != field.default_factory:
+                self.assertEqual(
+                    getattr(args, field.name), field.default, f"Default value for {field.name} is not set correctly."
+                )
+            else:
+                self.assertIsNone(getattr(args, field.name), f"Default value for {field.name} should be None.")
 
 
 if __name__ == "__main__":

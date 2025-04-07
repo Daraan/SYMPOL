@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 
 def test_mode_func(trainable: FunctionalTrainable, setup: SympolSetup):
-    return trainable({})
     return trainable(setup.param_space)
 
 

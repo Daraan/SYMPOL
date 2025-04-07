@@ -61,8 +61,6 @@ __all__ = [
     "JaxPPOLearner",
 ]
 
-# FIXME: # CRITICAL - sync weights to env runner - how to.
-
 logger = logging.getLogger(__name__)
 
 
@@ -183,8 +181,8 @@ class JaxLearner(Learner):
         logger.warning("get_param_ref called which is not fully implemented")
         return param
 
-    # FIXME
     def compute_gradients(self, loss_per_module: dict[ModuleID, Any], **kwargs) -> ParamDict:
+        # TODO: Can this be its own function?
         return super().compute_gradients(loss_per_module, **kwargs)
 
     def _convert_batch_type(self, batch: MultiAgentBatch) -> MultiAgentBatch:
@@ -263,7 +261,6 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         # possibly use jit and wrap them all
         TfLearner._untraced_update
         TorchLearner._uncompiled_update
-        # FIXME
         # get them from somewhere else?
         self.metrics.activate_tensor_mode()
         # fwd_out = self.module.forward_train(batch)

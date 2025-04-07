@@ -22,17 +22,29 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
 
     train_batch_size_per_learner: int = 4096  # batch size that ray samples
 
-    seed: int = 42
-    # FIXME: Why is default value not honored when parsed?
+    seed: int = 42  # pyright: ignore[reportIncompatibleVariableOverride]
+    """
+    Seed for the environment
+
+    Note:
+        For JAX `None` is not a valid value.
+    """
+
+    legacy: bool = True
+    """Use original SYMPOL implementation for PPO and btching"""
 
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
-        # FIXME # CRITICAL does not update args that are registered in it
         return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
         super().configure()
-        self.add_argument("--batch_size", dest="train_batch_size_per_learner", type=int, required=False)
+        self.add_argument(
+            "--batch_size",
+            dest="train_batch_size_per_learner",
+            type=int,
+            required=False,
+        )
 
         self.add_argument(
             "--no-adamW",
@@ -40,7 +52,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             dest="adamW",
             help="Do not use AdamW optimizer (explicitly sets to False)",
             required=False,
-            default=self.adamW,
+            default=False,
         )
         self.add_argument(
             "--no-render_env",
@@ -48,7 +60,6 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             action="store_false",
             help="Flag to disable rendering of the environment",
             required=False,
-            default=self.render_env,
         )
         self.add_argument(
             "--no-reduce_lr",
@@ -56,24 +67,21 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             action="store_false",
             help="Flag to not use reduce_lr",
             required=False,
-            default=self.reduce_lr,
         )
+        # Overwrite to to use new default
+        self.add_argument("-s", "--seed", default=42, type=int)
+
+        # no args from fields
 
     # overwritten by dataclass from CLI Args
-    def __setattr__XX(self, name, value) -> None:  # use a better __setstate__
-        if name == "use_comet_offline":
-            return  # a property
-        super().__setattr__(name, value)
 
     def __setstate__(self, d: Dict[str, Any]) -> None:
         d.pop("use_comet_offline", None)  # do not set property
         return super().__setstate__(d)
 
     def process_args(self) -> None:
-        if self.seed is None:
-            # FIXME: Why is default value not honored when parsed?
-            # Is whole DefaultArgumentParser not used?
-            self.seed = type(self).seed
+        if self.seed is None and type(self).seed is not None:
+            logger.error("No seed found. But there should be one in the class. Should not happen.")
         self._process_args_sympol()
         self._process_args_ray_utilities()
         assert self.agent_type == self.actor
@@ -91,8 +99,6 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         self.env_type = self.env_id
         self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
         self.render_mode = "rgb_array" if self.render_env else None
-        # self.wandb = "offline+upload" if self.track else False
-        # self.comet = "offline+upload" if self.track else False
 
     def _process_args_sympol(self) -> None:
         explicit_args_corrected = []
