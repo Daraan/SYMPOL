@@ -75,123 +75,38 @@ class SympolRLModel(JaxRLModel):
 
             return map_fn
 
+        if config["adamW"]:
+            optimizer = optax.adamw
+        else:
+            optimizer = optax.adam
+
+        gradient_transformations = (
+            optax.clip_by_global_norm(config["max_grad_norm"]),
+            optax.multi_transform(
+                {
+                    "estimator_weights": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_weights"]),
+                    "split_values": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_split_values"]),
+                    "split_idx_array": optax.inject_hyperparams(optimizer)(
+                        config["learning_rate_actor_split_idx_array"]
+                    ),
+                    "leaf_array": optax.inject_hyperparams(optimizer)(config["learning_rate_actor_leaf_array"]),
+                    "log_std": optax.inject_hyperparams(optimizer)(config["learning_rate_actor_log_std"]),
+                },
+                map_nested_fn(lambda k, _: k),
+            ),
+        )
         if config["SWA"]:
             from optax_swag import swag
 
-            if config["adamW"]:
-                actor_state = ActorTrainState.create(
-                    apply_fn=None,
-                    params=actor.init(rng, jnp.array([sample])),
-                    tx=optax.chain(
-                        optax.clip_by_global_norm(config["max_grad_norm"]),
-                        optax.multi_transform(
-                            {
-                                "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_weights"]
-                                ),
-                                "split_values": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_split_values"]
-                                ),
-                                "split_idx_array": optax.inject_hyperparams(optax.adamw)(
-                                    config["learning_rate_actor_split_idx_array"]
-                                ),
-                                "leaf_array": optax.inject_hyperparams(optax.adamw)(
-                                    config["learning_rate_actor_leaf_array"]
-                                ),
-                                "log_std": optax.inject_hyperparams(optax.adamw)(config["learning_rate_actor_log_std"]),
-                            },
-                            map_nested_fn(lambda k, _: k),
-                        ),
-                        swag(10, 2),
-                    ),
-                    grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
-                    indices=actor.init_indices(rng),
-                )
-            else:
-                actor_state = ActorTrainState.create(
-                    apply_fn=None,
-                    params=actor.init(rng, jnp.array([sample])),
-                    tx=optax.chain(
-                        optax.clip_by_global_norm(config["max_grad_norm"]),
-                        optax.multi_transform(
-                            {
-                                "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_weights"]
-                                ),
-                                "split_values": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_split_values"]
-                                ),
-                                "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_split_idx_array"]
-                                ),
-                                "leaf_array": optax.inject_hyperparams(optax.adam)(
-                                    config["learning_rate_actor_leaf_array"]
-                                ),
-                                "log_std": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_log_std"]),
-                            },
-                            map_nested_fn(lambda k, _: k),
-                        ),
-                        swag(10, 2),
-                    ),
-                    grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
-                    indices=actor.init_indices(rng),
-                )
-        elif config["adamW"]:
-            actor_state: ActorTrainState = ActorTrainState.create(
-                apply_fn=None,
-                params=actor.init(rng, jnp.array([sample])),
-                tx=optax.chain(
-                    optax.clip_by_global_norm(config["max_grad_norm"]),
-                    optax.multi_transform(
-                        {
-                            "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_weights"]
-                            ),
-                            "split_values": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_split_values"]
-                            ),
-                            "split_idx_array": optax.inject_hyperparams(optax.adamw)(
-                                config["learning_rate_actor_split_idx_array"]
-                            ),
-                            "leaf_array": optax.inject_hyperparams(optax.adamw)(
-                                config["learning_rate_actor_leaf_array"]
-                            ),
-                            "log_std": optax.inject_hyperparams(optax.adamw)(config["learning_rate_actor_log_std"]),
-                        },
-                        map_nested_fn(lambda k, _: k),
-                    ),
-                ),
-                grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
-                indices=actor.init_indices(rng),
-            )
-        else:
-            actor_state = ActorTrainState.create(
-                apply_fn=None,
-                params=actor.init(rng, jnp.array([sample])),
-                tx=optax.chain(
-                    optax.clip_by_global_norm(config["max_grad_norm"]),
-                    optax.multi_transform(
-                        {
-                            "estimator_weights": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_weights"]
-                            ),
-                            "split_values": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_split_values"]
-                            ),
-                            "split_idx_array": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_split_idx_array"]
-                            ),
-                            "leaf_array": optax.inject_hyperparams(optax.adam)(
-                                config["learning_rate_actor_leaf_array"]
-                            ),
-                            "log_std": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_log_std"]),
-                        },
-                        map_nested_fn(lambda k, _: k),
-                    ),
-                ),
-                grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
-                indices=actor.init_indices(rng),
-            )
+            gradient_transformations = (*gradient_transformations, swag(10, 2))
+
+        actor_state = ActorTrainState.create(
+            apply_fn=None,
+            params=actor.init(rng, jnp.array([sample])),
+            tx=optax.chain(*gradient_transformations),
+            grad_accum=jax.tree.map(jnp.zeros_like, actor.init(rng, jnp.array([sample]))),
+            indices=actor.init_indices(rng),
+        )
         return actor_state
 
 
