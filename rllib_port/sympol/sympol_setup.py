@@ -99,6 +99,12 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             minibatch_size=args.train_batch_size_per_learner,
             train_batch_size_per_learner=args.train_batch_size_per_learner,
         )
+        if args.minibatch_size > args.train_batch_size_per_learner:
+            logger.error(
+                "Minibatch size (%s) is larger than train batch size (%s). Likely leads to errors.",
+                args.minibatch_size,
+                args.train_batch_size_per_learner,
+            )
 
     @classmethod
     def config_from_args(cls, args):

@@ -88,13 +88,19 @@ class TestArgContents(unittest.TestCase):
         parser = SympolArgumentParser()
         args = parser.parse_args()
         # CLIArgs <= SympolArgumentParser
-        self.assertFalse(CLIArgs().adamW)
+        default_args = CLIArgs()
+        # no - attributes
+        self.assertFalse(default_args.adamW)
         self.assertFalse(args.adamW)
+        self.assertTrue(args.render_env)
+        self.assertTrue(args.reduce_lr)
+        self.assertTrue(default_args.render_env)
+        self.assertTrue(default_args.reduce_lr)
         self.assertDictEqual(
             {k: v for k, v in args.as_dict().items() if k in _default_args_dict},
             _default_args_dict,
         )
-        self.assertEqual(CLIArgs().adamW, args.adamW)
+        self.assertEqual(default_args.adamW, args.adamW)
 
     # Test key presence
     def test_typed_dict_conformance(self):

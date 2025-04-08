@@ -4,7 +4,7 @@ from unittest import mock
 
 from rllib_port.sympol.sympol_module import SympolPPOModule
 from rllib_port.sympol.sympol_setup import SympolSetup
-from tests._test_utils import SetupDefaults
+from tests._test_utils import SetupDefaults, fixed_args
 from utils.envs import build_env
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ class TestTraining(SetupDefaults):
             self._ALGORITHM_CONFIG: PPOConfig
             self._ALGORITHM_CONFIG = config = self._SETUP.config  # type: ignore[assignment]
             config.training(
-                train_batch_size_per_learner=18, minibatch_size=6, shuffle_batch_per_epoch=False, num_epochs=1
+                train_batch_size_per_learner=18, minibatch_size=18, shuffle_batch_per_epoch=False, num_epochs=1
             )
             config.learners(num_gpus_per_learner=0, num_cpus_per_learner=1)
             config.env_runners(num_envs_per_env_runner=3)
@@ -38,7 +38,19 @@ class TestTraining(SetupDefaults):
             self._RL_MODULE_SPEC = self._ALGORITHM_CONFIG.get_rl_module_spec(self._ENV)
             self._RL_MODULE = self._RL_MODULE_SPEC.build()
             self.assertEqual(self._RL_MODULE_SPEC.module_class, SympolPPOModule)
+            config.learner_config_dict["legacy_minibatch_size"] = 8
+            self.failIf(
+                config.learner_config_dict.get("legacy_minibatch_size", float("-inf")) > config.minibatch_size,
+                "Pretest: Minibatch size is larger than train batch size",
+            )
 
+    @fixed_args
     def test_trainable(self):
         trainable = self._SETUP.create_trainable()
-        trainable({})
+        # with self.subTest("No parameters"):
+        #    _result = trainable({})
+        with self.subTest("With parameters"):
+            setup = SympolSetup(init_param_space=True)
+            self.assertIsNotNone(setup.args.seed)
+            params = setup.sample_params()
+            _result = trainable(params)

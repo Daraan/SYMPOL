@@ -94,7 +94,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
                     )
                     model = model_cls(self._DEFAULT_CONFIG_DICT, action_dim=self._ACTION_DIM)
                     init_state = model.init_state(self._ACTOR_KEY, self._ENV_SAMPLE)
-                out = model({"state": init_state, "obs": self._DEFAULT_INPUT})
+                out = model({"obs": self._DEFAULT_INPUT}, state=init_state)
                 npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
     def test_critic_mlp(self):
@@ -108,7 +108,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
             o_out = o_critic.apply(o_critic_state.params, self._DEFAULT_INPUT)
 
         init_state = model.init_state(self._CRITIC_KEY, self._ENV_SAMPLE)
-        out = model.__call__({"state": init_state, "obs": self._DEFAULT_INPUT})
+        out = model.__call__({"obs": self._DEFAULT_INPUT}, state=init_state)
         npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
 
