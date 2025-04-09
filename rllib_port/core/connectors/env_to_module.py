@@ -32,7 +32,7 @@ import logging
 from functools import partial
 from typing import TYPE_CHECKING
 
-from rllib_port.rllib.connectors.debug_connector import DebugConnector
+from rllib_port.core.connectors.debug_connector import DebugConnector
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig

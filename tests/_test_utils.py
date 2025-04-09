@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import sys
 import unittest
 from dataclasses import asdict
@@ -6,17 +7,16 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Collection
 from unittest import mock
 
-import tree
-import numpy.testing as npt
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
+import numpy.testing as npt
 import optax
+import tree
 from typing_extensions import NotRequired, Required, get_origin, get_type_hints
 
 from config_types.args_types import CLIArgs
 from mlp import Actor_MLP, Critic_MLP
-from rllib_port.sympol.sympol_setup import SympolSetup
 from sdt import Actor_SDT, Critic_SDT
 from sympol import SYMPOL_RL
 from utils.utils import ActorTrainState, TrainState
@@ -24,7 +24,7 @@ from utils.utils import ActorTrainState, TrainState
 if TYPE_CHECKING:
     import chex
 
-fixed_args = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-e", "20"])
+args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-e", "2", "-np"])
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
 

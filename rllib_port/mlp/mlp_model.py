@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import jax
 
 from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
-from rllib_port.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
+from rllib_port.core.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
 
 if TYPE_CHECKING:
     from config_types.params_types import MLPParams

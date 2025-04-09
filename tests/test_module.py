@@ -14,17 +14,17 @@ from ray.rllib.core.columns import Columns
 
 import args  # noqa: F401
 from mlp import Critic_MLP
+from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
 from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
 from rllib_port.sympol.sympol_model import SympolRLModel
-from rllib_port.sympol.sympol_module import SympolPPOModule
-from rllib_port.sympol.sympol_setup import SympolSetup
+from rllib_port.sympol_setup import SympolSetup
 from sympol import SYMPOL_RL
 from tests._test_utils import DisableBreakpointsForGUI, SetupDefaults, clean_args
 
 if TYPE_CHECKING:
-    from ray.rllib.connectors.env_to_module.env_to_module_pipeline import EnvToModulePipeline
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
+    from ray.rllib.connectors.env_to_module.env_to_module_pipeline import EnvToModulePipeline
 
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
 
@@ -173,7 +173,7 @@ class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
             subset_fraction=0.8,
         ).init_indices(self._ACTOR_KEY)
         with self.assertRaises(dataclasses.FrozenInstanceError):
-            indices.features_by_estimator = indices.features_by_estimator.at[-1, -1].add(1)
+            indices.features_by_estimator = indices.features_by_estimator.at[-1, -1].add(1)  # pyright: ignore[reportAttributeAccessIssue] # readonly
 
     def test_indices_equivalence(self):
         modelA1 = SYMPOL_RL(

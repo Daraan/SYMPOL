@@ -8,19 +8,20 @@ try:
     from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
 except ModuleNotFoundError:
     # Refactoring of ray
-    from ray.rllib.algorithms.ppo.ppo_rl_module import PPORLModule as DefaultPPORLModule  # pyright: ignore[reportPrivateImportUsage]
+    from ray.rllib.algorithms.ppo.ppo_rl_module import (
+        PPORLModule as DefaultPPORLModule,  # pyright: ignore[reportPrivateImportUsage]
+    )
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
 from ray_utilities.jax.distributions.get_distributions_mixin import GetJaxDistributionsMixin
 from ray_utilities.jax.jax_module import JaxModule
+from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.mlp.mlp_model import CriticMLPModel
-from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
 from utils.get_action_and_value import get_action_and_value
 
 if TYPE_CHECKING:
-    from utils.utils import ActorTrainState, Storage, TrainState
     import chex
     import gymnasium as gym
     from numpy.typing import NDArray
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
     from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
     from rllib_port.sympol.sympol_model import SympolRLModel
+    from utils.utils import ActorTrainState, Storage, TrainState
 
 # for a Intermediate old API to new API Module
 
@@ -38,7 +40,7 @@ if TYPE_CHECKING:
 class JaxPPOStateDict(TypedDict):
     actor: ActorTrainState
     critic: TrainState
-    module_key: int
+    module_key: int | chex.PRNGKey
 
 
 class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):

@@ -6,11 +6,11 @@ import jax
 from ray.rllib.connectors.module_to_env import GetActions as _GetActions  # do not confuse with
 from ray.rllib.core.columns import Columns
 
-
 if TYPE_CHECKING:
     import chex
+
     from ray_utilities.jax.distributions.jax_distributions import RLlibToJaxDistribution
-    from rllib_port.sympol.sympol_module import SympolPPOModule
+    from rllib_port.core.sympol_module import SympolPPOModule
 
 __all__ = ["GetActionsJaxDistr"]
 

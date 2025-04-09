@@ -1,16 +1,15 @@
-from typing import Any
 import unittest
 import unittest.mock
+from dataclasses import asdict
+from typing import Any
 
 from args import get_args, get_args_old  # noqa: F401  # avoid circular imports
 from config_types.args_types import CLIArgs
-from dataclasses import asdict
 from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
 from rllib_port.extended_args import SympolArgumentParser
-
-from rllib_port.sympol.sympol_setup import SympolSetup
+from rllib_port.sympol_setup import SympolSetup
 from tests._original_args import get_original_args
-from tests._test_utils import clean_args, fixed_args, get_required_keys
+from tests._test_utils import args_train_no_tuner, clean_args, get_required_keys
 
 _default_args = CLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!
@@ -124,11 +123,11 @@ class TestArgContents(unittest.TestCase):
 
     # orignal <= cliargs <= Sympol
 
-    @fixed_args
+    @args_train_no_tuner
     def test_get_args_wrapper(self):
         self.assertEqual(get_args(), SympolArgumentParser().parse_args())
 
-    @fixed_args
+    @args_train_no_tuner
     def test_new_parser(self):
         new_args = get_args()
         self.assertLessEqual(_default_args_key_set, set(vars(new_args).keys()))

@@ -3,7 +3,6 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING
 
-import jax
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 
 from ray_utilities.dummy_encoder import DummyActorCriticEncoderConfig

@@ -62,12 +62,10 @@ DebugConnector (LearnerConnectorEnd): {batch={'default_policy':
 
 from __future__ import annotations
 
-
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ray.rllib.connectors.connector_v2 import ConnectorV2
-import logging
-
 
 if TYPE_CHECKING:
     from ray.rllib.core.rl_module.rl_module import RLModule

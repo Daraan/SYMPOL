@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 
 import jax
 
-from rllib_port.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
+from rllib_port.core.stated_flax_model import StatedActorFlaxRLModel, StatedCriticFlaxRLModel
 from sdt import Actor_SDT, Critic_SDT
 
 if TYPE_CHECKING:
-    from utils import _is_discreteT
     from config_types.params_types import SDTParams
+    from utils import _is_discreteT
 
 logger = logging.getLogger(__name__)
 

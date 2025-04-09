@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Optional
-from typing_extensions import Self
 
 import jax
 import jax.numpy as jnp
 import optax
 from ray.rllib.utils.typing import TensorType
+from typing_extensions import Self
 
 from ray_utilities.jax.jax_model import JaxRLModel, PureJaxModelProtocol
 from sympol import SYMPOL_RL

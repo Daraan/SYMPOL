@@ -20,17 +20,18 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
-from rllib_port.rllib.connectors.debug_connector import DebugConnector
-from rllib_port.rllib.jax_learner import _NoTensorConverter
 from ray.rllib.connectors.learner import (
     AddOneTsToEpisodesAndTruncate,
     GeneralAdvantageEstimation,
 )
 
+from rllib_port.core.connectors.debug_connector import DebugConnector
+from rllib_port.core.jax_learner import _NoTensorConverter
+
 if TYPE_CHECKING:
+    import gymnasium as gym
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.connectors.connector_v2 import ConnectorV2
-    import gymnasium as gym
 
 
 # Append OBS handling.

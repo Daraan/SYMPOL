@@ -2,9 +2,9 @@ import sys
 from typing import TYPE_CHECKING
 from unittest import mock
 
-from rllib_port.sympol.sympol_module import SympolPPOModule
-from rllib_port.sympol.sympol_setup import SympolSetup
-from tests._test_utils import SetupDefaults, fixed_args
+from rllib_port.core.sympol_module import SympolPPOModule
+from rllib_port.sympol_setup import SympolSetup
+from tests._test_utils import SetupDefaults, args_train_no_tuner
 from utils.envs import build_env
 
 if TYPE_CHECKING:
@@ -44,13 +44,13 @@ class TestTraining(SetupDefaults):
                 "Pretest: Minibatch size is larger than train batch size",
             )
 
-    @fixed_args
+    @args_train_no_tuner
     def test_trainable(self):
-        trainable = self._SETUP.create_trainable()
         # with self.subTest("No parameters"):
         #    _result = trainable({})
         with self.subTest("With parameters"):
             setup = SympolSetup(init_param_space=True)
+            trainable = setup.create_trainable()
             self.assertIsNotNone(setup.args.seed)
             params = setup.sample_params()
             _result = trainable(params)

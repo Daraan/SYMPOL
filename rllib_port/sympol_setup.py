@@ -10,12 +10,12 @@ import configs
 from ray_utilities import create_default_trainable
 from ray_utilities.config import ExperimentSetupBase
 from ray_utilities.config.create_algorithm import create_algorithm_config
+from rllib_port.core.connectors.env_to_module import make_env_to_module_without_numpy
+from rllib_port.core.connectors.module_to_env import make_jax_module_to_env_connector
+from rllib_port.core.jax_learner import JaxPPOLearner
+from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
+from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.extended_args import SympolArgumentParser
-from rllib_port.rllib.connectors.env_to_module import make_env_to_module_without_numpy
-from rllib_port.rllib.connectors.module_to_env import make_jax_module_to_env_connector
-from rllib_port.rllib.jax_learner import JaxPPOLearner
-from rllib_port.sympol.sympol_catalog import SympolJaxPPOCatalog
-from rllib_port.sympol.sympol_module import SympolPPOModule
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig

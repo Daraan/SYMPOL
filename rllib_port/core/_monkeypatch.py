@@ -4,18 +4,8 @@ SampleBatch _concat_values does not support jax.
 This monkeypatch allows for concatenation of JAX arrays.
 """
 
-from typing import TYPE_CHECKING
-from ray.rllib.policy import sample_batch
-from ray.rllib.utils.framework import try_import_tf, try_import_torch
-
 import jax.numpy as jnp
-
-if TYPE_CHECKING:
-    import torch
-    import tensorflow as tf
-else:
-    tf1, tf, tfv = try_import_tf()
-    torch, _ = try_import_torch()
+from ray.rllib.policy import sample_batch
 
 _original_concat = sample_batch._concat_values
 

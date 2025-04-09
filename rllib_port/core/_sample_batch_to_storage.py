@@ -1,10 +1,11 @@
-from utils import Storage
-from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.core.columns import Columns
+from typing import Optional
 
 import jax
-from typing import Optional
 import jax.numpy as jnp
+from ray.rllib.core.columns import Columns
+from ray.rllib.policy.sample_batch import SampleBatch
+
+from utils import Storage
 
 
 def batch_to_storage(

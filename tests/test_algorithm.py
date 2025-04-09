@@ -1,22 +1,23 @@
 import sys
+import unittest
 from typing import TYPE_CHECKING, cast
 from unittest import mock
-import unittest
 
 import gymnasium as gym
 
+from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.sympol.sympol_model import SympolRLModel
-from rllib_port.sympol.sympol_module import SympolPPOModule
-from rllib_port.sympol.sympol_setup import SympolSetup
+from rllib_port.sympol_setup import SympolSetup
 from tests._test_utils import SetupDefaults
 from utils.envs import build_env
 
 if TYPE_CHECKING:
-    from rllib_port.rllib.jax_learner import JaxPPOLearner
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.algorithms.ppo.ppo import PPOConfig
     from ray.rllib.connectors.env_to_module import EnvToModulePipeline
     from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
+
+    from rllib_port.core.jax_learner import JaxPPOLearner
 
 
 class AlgorithmTests(SetupDefaults):
@@ -58,7 +59,7 @@ class AlgorithmTests(SetupDefaults):
             setup = SympolSetup(init_param_space=False)
             algorithm_config = setup.config
             algorithm_config.framework("torch")
-            cast("AlgorithmConfig", algorithm_config).training(
+            cast("AlgorithmConfig", algorithm_config).training(  # pyright: ignore[reportUnnecessaryCast]
                 add_default_connectors_to_learner_pipeline=True,  # maybe false
             )
             """
@@ -73,18 +74,18 @@ class AlgorithmTests(SetupDefaults):
             # Connectors:
 
             with self.subTest("learner_connector"):
-                learner_connector_pipe = algorithm_config.build_learner_connector(
+                _learner_connector_pipe = algorithm_config.build_learner_connector(
                     self._OBSERVATION_SPACE, self._ACTION_SPACE
                 )
             with self.subTest("env_to_module_connector"):
-                env_to_module: EnvToModulePipeline = algorithm_config.build_env_to_module_connector(env)
+                _env_to_module: EnvToModulePipeline = algorithm_config.build_env_to_module_connector(env)
             with self.subTest("module_to_env_connector"):
-                module_to_env_connector = algorithm_config.build_module_to_env_connector(env)
+                _module_to_env_connector = algorithm_config.build_module_to_env_connector(env)
 
             # NOTE: constructs an RLModule
             with self.subTest("learner"):
-                learner = algorithm_config.build_learner(env=env)
-                learner_group = algorithm_config.build_learner_group(rl_module_spec=rl_module_spec)
+                _learner = algorithm_config.build_learner(env=env)
+                _learner_group = algorithm_config.build_learner_group(rl_module_spec=rl_module_spec)
 
     # @unittest.skip("Skip this test for now")
     def test_algorithm_build(self):
@@ -196,4 +197,4 @@ class AlgorithmTests(SetupDefaults):
     def test_learner_connector(self):
         learner_connector = self._ALGORITHM_CONFIG.build_learner_connector(self._OBSERVATION_SPACE, self._ACTION_SPACE)
         # no batch
-        no_out = learner_connector(rl_module=self._RL_MODULE.as_multi_rl_module(), episodes=[])
+        _no_out = learner_connector(rl_module=self._RL_MODULE.as_multi_rl_module(), episodes=[])

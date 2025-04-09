@@ -4,25 +4,30 @@ from __future__ import annotations
 
 # Prepend: Anything that has to do with plain data processing (not
 # particularly with the actions).
-
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
-from rllib_port.rllib.connectors.debug_connector import DebugConnector
-from rllib_port.rllib.connectors.get_actions import GetActionsJaxDistr
-
+from rllib_port.core.connectors.debug_connector import DebugConnector
+from rllib_port.core.connectors.get_actions import GetActionsJaxDistr
 
 if TYPE_CHECKING:
     import chex
-    from utils.utils import EnvType
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.connectors.connector_v2 import ConnectorV2
     from ray.rllib.core.rl_module.rl_module import RLModule
 
+    from utils.utils import EnvType
+
 
 def _jax_module_to_env_connector(
-    env: EnvType, rl_module=None, *, key: chex.PRNGKey, algo: AlgorithmConfig, debug=False
-) -> list["ConnectorV2"]:  # noqa: ARG001
+    env: EnvType,  # noqa: ARG001
+    rl_module: RLModule | None = None,  # noqa: ARG001
+    *,
+    key: chex.PRNGKey,
+    algo: AlgorithmConfig,
+    debug=False,
+    **kwargs,  # noqa: ARG001
+) -> list["ConnectorV2"]:
     # NOTE: rl_module might not be used
     from ray.rllib.connectors.module_to_env import (
         ListifyDataForVectorEnv,
@@ -32,6 +37,7 @@ def _jax_module_to_env_connector(
         UnBatchToIndividualItems,
     )
 
+    # TODO: add test for pipline order
     # Remove extra time-rank, if applicable.
     pipeline = []
     pipeline.insert(0, RemoveSingleTsTimeRankFromBatch())
@@ -56,8 +62,8 @@ def _jax_module_to_env_connector(
     # Unsquash/clip actions based on config and action space.
     pipeline.append(
         NormalizeAndClipActions(
-            normalize_actions=algo.normalize_actions,
-            clip_actions=algo.clip_actions,
+            normalize_actions=algo.normalize_actions,  # pyright: ignore[reportArgumentType]
+            clip_actions=algo.clip_actions,  # pyright: ignore[reportArgumentType]
         )
     )
     # Listify data from ConnectorV2-data format to normal lists that we can

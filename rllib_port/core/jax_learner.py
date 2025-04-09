@@ -30,12 +30,20 @@ from ray.rllib.utils.typing import (
 )
 
 from config_types.args_types import CLIArgs
-from rllib_port._sample_batch_to_storage import batch_to_storage
 from rllib_port.sympol.sympol_model import SympolRLModel
 from utils.get_action_and_value import get_action_and_value, get_action_and_value2
 from utils.ppo import compute_gae, update_ppo
 
+from ._sample_batch_to_storage import batch_to_storage
+
 if TYPE_CHECKING:
+    from collections.abc import Hashable
+
+    from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
+    from ray.rllib.algorithms.ppo.ppo import PPOConfig
+    from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
+    from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
+    from ray.rllib.policy.sample_batch import SampleBatch
     from ray.rllib.utils.typing import (
         ModuleID,
         Optimizer,
@@ -43,15 +51,9 @@ if TYPE_CHECKING:
         ParamDict,
         TensorType,
     )
-    from collections.abc import Hashable
-
-    from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
-    from ray.rllib.algorithms.ppo.ppo import PPOConfig
-    from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
-    from ray.rllib.policy.sample_batch import SampleBatch
 
     from mlp import Critic_MLP
-    from rllib_port.sympol.sympol_module import SympolPPOModule
+    from rllib_port.core.sympol_module import SympolPPOModule
     from sdt import Critic_SDT
     from utils.utils import ActorTrainState, TrainState
 
@@ -387,19 +389,23 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         kl_loss: float,
     ) -> None:
         # Note uses:
-        config.kl_target
+        # TODO: check if this is called and should it be called
+        logger.warning("_update_module_kl_coeff called which is only minimally implemented")
+        # Does not use any torch functions; uses kl_target and curr_kl_coeffs_per_module
         PPOTorchLearner._update_module_kl_coeff(
             self,  # pyright: ignore[reportArgumentType]
             module_id=module_id,
             config=config,
             kl_loss=kl_loss,
         )
-        if False:
-            _TfExample.update_kl
-            _TfExample._set_kl_coeff
-            super()._update_module_kl_coeff(module_id=module_id, config=config, kl_loss=kl_loss)
+        if 0:
+            config.kl_target
+            self.curr_kl_coeffs_per_module[module_id]
+            # needs; but not implemented
+            self._get_tensor_variable
 
 
+# pyright: reportAbstractUsage=information
 if TYPE_CHECKING:
     __conf: Any = ...
     JaxLearner(config=__conf)
