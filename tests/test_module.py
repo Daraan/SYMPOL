@@ -67,7 +67,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
         with self.subTest("test_sympol_call"):
             model = SympolRLModel(obs_dim=2, action_dim=self._ACTION_DIM, config=config2)  # pyright: ignore[reportArgumentType]
             actor_state2 = model.init_state(self._ACTOR_KEY, self._ENV_SAMPLE)
-            out2 = model({"state": actor_state2, "obs": self._DEFAULT_INPUT})
+            out2 = model({"obs": self._DEFAULT_INPUT}, parameters=actor_state2.params, indices=actor_state2.indices)
 
             npt.assert_allclose(out1, out2)
 
@@ -94,7 +94,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
                     )
                     model = model_cls(self._DEFAULT_CONFIG_DICT, action_dim=self._ACTION_DIM)
                     init_state = model.init_state(self._ACTOR_KEY, self._ENV_SAMPLE)
-                out = model({"obs": self._DEFAULT_INPUT}, state=init_state)
+                out = model({"obs": self._DEFAULT_INPUT}, parameters=init_state.params)
                 npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
     def test_critic_mlp(self):
@@ -108,7 +108,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
             o_out = o_critic.apply(o_critic_state.params, self._DEFAULT_INPUT)
 
         init_state = model.init_state(self._CRITIC_KEY, self._ENV_SAMPLE)
-        out = model.__call__({"obs": self._DEFAULT_INPUT}, state=init_state)
+        out = model.__call__({"obs": self._DEFAULT_INPUT}, parameters=init_state.params)
         npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
 
@@ -146,7 +146,11 @@ class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
         module.setup()
         self.assertEqual(module.model_config["critic"], "mlp")
         with self.subTest("test critic", critic=module.model_config["critic"]):
-            critic_out = module.compute_values({"obs": self._DEFAULT_INPUT, "state": module.states["critic"]})
+            critic_out = module.compute_values({"obs": self._DEFAULT_INPUT}, parameters=None)
+            # training:
+            critic_out2 = module.compute_values({"obs": self._DEFAULT_INPUT}, parameters=module.states["critic"].params)
+            npt.assert_array_almost_equal(critic_out, critic_out2, decimal=5)  # type: ignore
+
             # has a squeeze(-1) at the end, reverse:
             critic_out = critic_out[..., None]  # NOTE: Output shape is not the same
 

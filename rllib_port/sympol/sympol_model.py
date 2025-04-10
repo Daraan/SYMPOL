@@ -29,9 +29,9 @@ class SympolRLModel(JaxRLModel):
         def __config_type(self):  # noqa
             self.config: SympolParams
 
-        def __call__(self, *args, **kwargs) -> TensorType:
+        def __call__(self, *args, parameters: dict, indices: dict, **kwargs) -> TensorType:
             """Call the model."""
-            return super().__call__(*args, **kwargs)
+            return super().__call__(*args, parameters=parameters, indices=indices, **kwargs)
 
     def __init__(self, *, obs_dim: int, action_dim: int, config: SYMPOLModelArgsDict):
         JaxRLModel.__init__(self, config=config)  # type: ignore[arg-type] not a ModelConfig

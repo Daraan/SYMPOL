@@ -16,4 +16,5 @@ def supports_jax_concat(*values, time_major=None):
     return _original_concat(*values, time_major=time_major)
 
 
+# module_advantages are are jax.Array when returned by the GeneralAdvantageEstimation
 sample_batch._concat_values = supports_jax_concat

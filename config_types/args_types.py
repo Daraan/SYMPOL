@@ -62,7 +62,7 @@ class Args(_HandleNos):
     checkpoint: bool = field(default=False, hash=False, compare=False)
     """If true, render environments each time there is an evaluation"""
     overwrite_explicit: bool = field(
-        default=True, hash=False, compare=False
+        default=False, hash=False, compare=False
     )  # NEW # NOTE: Different from default; change back when sure that Tap parsing arguments are passed on
     """Whether to overwrite explicit arguments"""
     no_adamW: bool = field(default=True, repr=False)

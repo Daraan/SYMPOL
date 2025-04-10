@@ -148,12 +148,6 @@ class AlgorithmTests(SetupDefaults):
                 ignore=ignore,
                 msg="actor: learner_module vs algo_module",
             )
-            self.util_test_state_equivalence(
-                learner_module.states["critic"],
-                algo_module.states["critic"],
-                ignore=ignore,
-                msg="critic: learner_module vs algo_module",
-            )
             algo.evaluate()
             # These are possibly not updated
             self.util_test_state_equivalence(
@@ -162,25 +156,37 @@ class AlgorithmTests(SetupDefaults):
                 ignore=ignore,
                 msg="actor: eval_module vs algo_module",
             )
-            self.util_test_state_equivalence(
-                eval_module.states["critic"],
-                algo_module.states["critic"],
-                ignore=ignore,
-                msg="critic: eval_module vs algo_module",
-            )
+            # critic might not be present in inference only mode
+            self.assertTrue("critic" in algo_module.states or algo_module.inference_only)
+            self.assertTrue("critic" in eval_module.states or eval_module.inference_only)
+            if "critic" in eval_module.states:
+                self.util_test_state_equivalence(
+                    learner_module.states["critic"],
+                    eval_module.states["critic"],
+                    ignore=ignore,
+                    msg="critic: learner_module vs eval_module",
+                )
+            if "critic" in algo_module.states:
+                # removed inference only state in get_state
+                self.util_test_state_equivalence(
+                    learner_module.states["critic"],
+                    algo_module.states["critic"],
+                    ignore=ignore,
+                    msg="critic: learner_module vs algo_module",
+                )
 
     @unittest.skip("Skip this test. Fails test but works with real inputs.")
     def test_module_to_env(self):
         module_to_env = self._ALGORITHM_CONFIG.build_module_to_env_connector(self._ENV)
         model = SympolRLModel(obs_dim=2, action_dim=self._ACTION_DIM, config=self._DEFAULT_CONFIG_DICT)  # pyright: ignore[reportArgumentType]
         actor_state2 = model.init_state(self._ACTOR_KEY, self._ENV_SAMPLE)
-        out = model({"state": actor_state2, "obs": self._DEFAULT_INPUT})
+        out = model({"obs": self._DEFAULT_INPUT}, parameters=actor_state2.params, indices=actor_state2.indices)
 
         from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
         from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
         from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 
-        episodes = [SingleAgentEpisode()]
+        episodes = [SingleAgentEpisode(observations=self._DEFAULT_INPUT)]
         import numpy as np
 
         module_to_env(

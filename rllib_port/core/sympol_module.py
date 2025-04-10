@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# pyright: reportIncompatibleMethodOverride=warning
+
+import logging
 from typing import TYPE_CHECKING, Any, Optional, TypedDict, Union, cast
 
 import jax
@@ -35,6 +38,8 @@ if TYPE_CHECKING:
     from utils.utils import ActorTrainState, Storage, TrainState
 
 # for a Intermediate old API to new API Module
+
+logger = logging.getLogger(__name__)
 
 
 class JaxPPOStateDict(TypedDict):
@@ -134,8 +139,15 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
     # region: forward methods
 
     # Currently Same as DefaultPPOTorchRLModule
-    def _forward(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:
-        """Default forward pass (used for inference and exploration)."""
+    def _forward(
+        self, batch: dict[str, Any], *, parameters: Optional[dict] = None, indices: Optional[dict] = None, **kwargs
+    ) -> dict[str, Any]:
+        """
+        Default forward pass (used for inference and exploration).
+
+        Note:
+            To compute gradients pass parameters via keyword `parameters`.
+        """
         output = {}
         # Encoder forward pass.
         encoder_outs = self.encoder(batch)
@@ -143,10 +155,11 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         if Columns.STATE_OUT in encoder_outs:
             output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
         # Pi head.
-        encoder_outs[ENCODER_OUT][ACTOR]
-        # print("forward out encoder_outs[ENCODER_OUT][ACTOR])
-        encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
-        model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
+        model_out = self.pi(
+            encoder_outs[ENCODER_OUT][ACTOR],
+            parameters=parameters if parameters is not None else self.states[ACTOR].params,
+            indices=indices if indices is not None else self.states[ACTOR].indices,
+        )
         if self.model_config["action_type"] != "discrete":
             # mean, log_std = model_out
             # TODO: Figure which return values to use
@@ -158,15 +171,24 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         return output
 
     # Currently Same as DefaultPPOTorchRLModule
-    def _forward_train(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:
-        """Train forward pass (keep embeddings for possible shared value func. call)."""
+    def _forward_train(self, batch: dict[str, Any], *, parameters, indices=None, **kwargs) -> dict[str, Any]:
+        """
+        Train forward pass (keep embeddings for possible shared value func. call).
+
+        Note:
+            To compute gradients pass parameters via keyword `parameters`.
+        """
         output = {}
         encoder_outs = self.encoder(batch)
         output[Columns.EMBEDDINGS] = encoder_outs[ENCODER_OUT][CRITIC]
         if Columns.STATE_OUT in encoder_outs:
             output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
-        encoder_outs[ENCODER_OUT][ACTOR]["state"] = self.states[ACTOR]
-        model_out = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
+        model_out = self.pi(
+            encoder_outs[ENCODER_OUT][ACTOR],
+            parameters=parameters,
+            indices=self.states[ACTOR].indices if indices is None else indices,
+            **kwargs,
+        )
         if self.model_config["action_type"] != "discrete":
             # mean, log_std = model_out
             # TODO: Figure which return values to use
@@ -175,7 +197,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
             output[Columns.ACTION_DIST_INPUTS] = model_out
         return output
 
-    def _forward_inference(self, batch: dict[str, Any], **kwargs) -> dict[str, Any]:
+    def _forward_inference(self, batch: dict[str, Any], *, parameters=None, indices=None, **kwargs) -> dict[str, Any]:
         """Forward-pass used for action computation without exploration behavior.
 
         Override this method only, if you need specific behavior for non-exploratory
@@ -185,14 +207,23 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         By default, this calls the generic `self._forward()` method.
         """
         batch = jax.lax.stop_gradient(batch)
-        return self._forward(batch, **kwargs)
+        # TODO: should not use exploration; rather _forward which is not implemented
+        return self._forward(batch, parameters=parameters, indices=indices, **kwargs)
 
     def compute_values(
         self,
         batch: dict[str, Any],
         embeddings: Optional[Any] = None,
+        *,
+        parameters: Optional[
+            chex.Array
+        ] = None,  # XXX For GaeIn the Connector pipeline setting this to None; however it may not be omitted for gradient computation
     ) -> TensorType:
         """Computes the value estimates given `batch`.
+
+        Note:
+            To allow gradient computation, pass `parameters` via keyword argument,
+            otherwise set it to None
 
         Args:
             batch: The batch to compute value function estimates for.
@@ -223,15 +254,46 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
             else:
                 embeddings = self.encoder(batch)[ENCODER_OUT][CRITIC]
 
-        # Value head. Should not be a list eve in continous case.
-        vf_out = self.vf(embeddings, state=self.states["critic"])  # type: ignore[arg-type]
-        vf_out = vf_out.squeeze(-1)
-        batch[Columns.VF_PREDS] = (
-            vf_out  # NEW: # TODO: rllib does not add this to batch here, why; do during learner update?  # noqa: E501
+        if False and parameters is None:
+            logger.debug(
+                "No parameters passed to compute_values, using current parameters; "
+                "this is ONLY fine when called in general_advantage_estimation.",
+                stack_info=False,
+                stacklevel=2,
+            )
+        # Value head. Should not be a list even in continuous case.
+        vf_out = self.vf(
+            embeddings,  # pyright: ignore[reportArgumentType]
+            parameters=parameters if parameters is not None else self.states[CRITIC].params,
         )
+        vf_out = vf_out.squeeze(axis=-1)  # pyright: ignore[reportArgumentType]
+        # NEW: # TODO: rllib does not add this to batch here, why; do during learner update?
+        # During rollout we do not need a JAX array here; casting would also allow to get rid of SampleBatch monkeypatch
+        # during inference/rollout this used stop_gradient
+        # NOTE: Cannot use this when inside jit
+        # possibly use. https://github.com/jax-ml/jax/discussions/9241
+        # if not self.inference_only:  # probably only need this in legacy
+        #    batch[Columns.VF_PREDS] = np.asarray(vf_out)
         return vf_out
 
     # endregion
+
+    def get_state(
+        self,
+        *args,  # noqa: ARG002
+        inference_only: bool = False,
+        **kwargs,  # noqa: ARG002
+    ) -> JaxPPOStateDict:
+        state_dict = self.states
+        # critic state not needed; possibly only bother when using GPU
+        # however, if we copy the dict -> key updates are not performed -> repeated usage of keys!
+        if inference_only and not self.inference_only:
+            state_dict = state_dict.copy()
+            attr = [*self.get_non_inference_attributes(), "critic"]
+            for key in list(state_dict.keys()):
+                if any(key.startswith(a) and (len(key) == len(a) or key[len(a)] == ".") for a in attr):
+                    del state_dict[key]
+        return state_dict
 
     # region non-rllib interface
 

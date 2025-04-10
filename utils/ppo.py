@@ -7,14 +7,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-from frozendict import frozendict
 
 from utils.get_action_and_value import get_action_and_value2
-from utils.utils import ActorTrainState
 
 if TYPE_CHECKING:
     import chex
-    import numpy as np
     from numpy.typing import NDArray
 
     from config_types.args_types import CLIArgs
@@ -22,7 +19,7 @@ if TYPE_CHECKING:
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
     from sympol import SYMPOL_RL
-    from utils.utils import Storage, TrainState
+    from utils.utils import ActorTrainState, Storage, StorageNoValues, TrainState
 
     _Actor = PureJaxModelProtocol | Actor_MLP | Actor_MLP_Continuous | Actor_SDT | SYMPOL_RL
     _Critic = Critic_MLP | Critic_SDT
@@ -83,7 +80,7 @@ def ppo_loss_base(
     a,
     logp,
     mb_advantages,
-    mb_returns,
+    mb_returns,  # value_targets
     *,
     action_type: Literal["discrete", "continuous"],
     actor: _Actor,
@@ -123,7 +120,7 @@ def ppo_loss_base(
     # Value loss
     v_loss = 0.5 * ((newvalue - mb_returns) ** 2).mean()
 
-    entropy_loss = entropy.mean()
+    entropy_loss = entropy.mean()  # pyright: ignore[reportAttributeAccessIssue]
     loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
     return loss, (pg_loss, v_loss, entropy_loss, jax.lax.stop_gradient(approx_kl))
 
@@ -137,7 +134,7 @@ ppo_loss_base_grad_fn = jax.value_and_grad(ppo_loss_base, argnums=(0, 1), has_au
 def update_ppo(
     actor_state: ActorTrainState,
     critic_state: TrainState,
-    storage: Storage,
+    storage: StorageNoValues,
     key: chex.PRNGKey,
     accumulate_gradients_every: int,
     *,
@@ -164,10 +161,10 @@ def update_ppo(
             return x
 
         flatten_storage = jax.tree_map(flatten, storage)
-        shuffled_storage = jax.tree_map(convert_data, flatten_storage)
+        shuffled_storage: StorageNoValues = jax.tree_map(convert_data, flatten_storage)
 
         def update_minibatch(
-            carry: tuple[ActorTrainState, TrainState], minibatch: Storage
+            carry: tuple[ActorTrainState, TrainState], minibatch: StorageNoValues
         ) -> tuple[
             tuple[ActorTrainState, TrainState],
             tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, Any],
@@ -180,7 +177,7 @@ def update_ppo(
                 minibatch.actions,
                 minibatch.logprobs,
                 minibatch.advantages,
-                minibatch.returns,
+                minibatch.returns,  # value_targets
                 action_type=args.action_type,
                 actor=actor,
                 critic=critic,

@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Mapping
 
@@ -9,11 +12,10 @@ from flax import struct
 
 from utils.jax_math import entmax15JAX
 
-
-from dataclasses import dataclass, field
-
 if TYPE_CHECKING:
     import chex
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True, frozen=True, eq=False)
@@ -176,7 +178,6 @@ class SYMPOL_RL:
         )
         return indices
 
-    # NEW: # XXX can indices be static?
     @partial(jax.jit, static_argnames=("indices",))
     def apply(
         self, params: Mapping, inputs: jax.Array, indices: dict | Indices

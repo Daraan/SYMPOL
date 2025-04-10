@@ -52,7 +52,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             dest="adamW",
             help="Do not use AdamW optimizer (explicitly sets to False)",
             required=False,
-            default=False,
+            default=False,  # will be stored in adamW
         )
         self.add_argument(
             "--no-render_env",
@@ -107,6 +107,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
                 explicit_args_corrected.append("".join(some_arg.split("no-")))
             else:
                 explicit_args_corrected.append(some_arg)
+        # FIXME: When using args with "dest" these will not match the dest
         explicit_arg_values = {arg: getattr(self, arg) for arg in explicit_args_corrected}
 
         no_update = True

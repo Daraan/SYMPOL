@@ -95,7 +95,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
     def apply_legacy_settings(cls, config: AlgorithmConfig | PPOConfig, args: SympolArgumentParser) -> None:
         config.training(
             num_epochs=1,  # passes over the batch_size data; handled by update_ppo
-            learner_config_dict={"legacy_minibatch_size": args.minibatch_size},
+            learner_config_dict={"legacy_minibatch_size": args.minibatch_size, "legacy": True},
             minibatch_size=args.train_batch_size_per_learner,
             train_batch_size_per_learner=args.train_batch_size_per_learner,
         )
@@ -148,6 +148,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
                 "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
+                "legacy": args.legacy,
             },
         )
         # PPO specific training settings
@@ -155,6 +156,13 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
         if args.legacy:
             logger.debug("Using legacy implementation")
             cls.apply_legacy_settings(config, args)
+        else:
+            config.training(
+                num_epochs=20,  # passes over the batch_size data; handled by update_ppo
+                minibatch_size=args.minibatch_size,
+                train_batch_size_per_learner=args.train_batch_size_per_learner,
+            )
+            assert not config.learner_config_dict.get("legacy")
         # logging
         logger.info(
             "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",

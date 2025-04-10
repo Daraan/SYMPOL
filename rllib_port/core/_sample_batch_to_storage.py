@@ -5,15 +5,15 @@ import jax.numpy as jnp
 from ray.rllib.core.columns import Columns
 from ray.rllib.policy.sample_batch import SampleBatch
 
-from utils import Storage
+from utils.utils import StorageNoValues
 
 
 def batch_to_storage(
     batch: SampleBatch,
-    values: Optional[jax.Array] = None,
+    # values: Optional[jax.Array] = None,
     advantages: Optional[jax.Array] = None,
     returns: Optional[jax.Array] = None,
-) -> Storage:
+) -> StorageNoValues:
     """
     Convert a SampleBatch to a Storage object.
 
@@ -27,8 +27,8 @@ def batch_to_storage(
     # Original code expects shape (len, n_envs), ray does not report all envs; rehsping to -1
     rewards = batch[Columns.REWARDS].reshape(-1, 1)
     assert len(rewards.shape) == 2
-    storage = Storage(
-        values=jnp.zeros_like(rewards) if values is None else values.reshape(-1, 1),
+    storage = StorageNoValues(
+        # values=jnp.zeros_like(rewards) if values is None else values.reshape(-1, 1),
         advantages=jnp.zeros_like(rewards) if advantages is None else advantages.reshape(-1, 1),
         obs=batch[Columns.OBS][:, None, ...],
         actions=batch[Columns.ACTIONS][:, None, ...],

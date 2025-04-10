@@ -78,13 +78,12 @@ def format_array(arr) -> str:
     return f"{arr[:2]}\n ...\n{arr[-2:]}" if arr.size > 4 else str(arr)
 
 
-@flax.struct.dataclass
-class Storage:
+@flax.struct.dataclass(kw_only=True)
+class StorageNoValues:
     obs: jnp.ndarray
     actions: jnp.ndarray
     logprobs: jnp.ndarray
     dones: jnp.ndarray
-    values: jnp.ndarray
     advantages: jnp.ndarray
     returns: jnp.ndarray
     rewards: jnp.ndarray
@@ -97,7 +96,7 @@ class Storage:
                 f"actions {self.actions.shape}={format_array(self.actions)},\n"
                 f"logprobs {self.logprobs.shape}={format_array(self.logprobs)},\n"
                 f"dones {self.dones.shape}={format_array(self.dones)},\n"
-                f"values {self.values.shape}={format_array(self.values)},\n"
+                f"values {self.values.shape}={format_array(self.values)},\n" if hasattr(self, "values") else "" # pyright: ignore[reportAttributeAccessIssue] # fmt: skip
                 f"advantages {self.advantages.shape}={format_array(self.advantages)},\n"
                 f"returns {self.returns.shape}={format_array(self.returns)},\n"
                 f"rewards {self.rewards.shape}={format_array(self.rewards)}\n"
@@ -114,7 +113,7 @@ class Storage:
                 f"actions={format_array(self.actions)},\n"
                 f"logprobs={format_array(self.logprobs)},\n"
                 f"dones={format_array(self.dones)},\n"
-                f"values={format_array(self.values)},\n"
+                f"values={format_array(self.values)},\n" if hasattr(self, "values") else ""  # pyright: ignore[reportAttributeAccessIssue] # fmt: skip
                 f"advantages={format_array(self.advantages)},\n"
                 f"returns={format_array(self.returns)},\n"
                 f"rewards={format_array(self.rewards)}\n"
@@ -126,6 +125,11 @@ class Storage:
     if TYPE_CHECKING:  # added by flax.struct.dataclass
 
         def replace(self, *args, **kwargs) -> Self: ...
+
+
+@flax.struct.dataclass(kw_only=True)
+class Storage(StorageNoValues):
+    values: jnp.ndarray
 
 
 @flax.struct.dataclass

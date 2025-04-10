@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, cast
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+from ray.rllib.algorithms.ppo.ppo import (
+    LEARNER_RESULTS_KL_KEY,
+    LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY,
+    LEARNER_RESULTS_VF_LOSS_UNCLIPPED_KEY,
+    PPOConfig,
+)
 from ray.rllib.algorithms.ppo.ppo_learner import PPOLearner as RayPPOLearner
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
 from ray.rllib.connectors.connector_v2 import ConnectorV2
 from ray.rllib.connectors.learner import GeneralAdvantageEstimation
+from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.columns import Columns
-from ray.rllib.core.learner.learner import Learner
+from ray.rllib.core.learner.learner import ENTROPY_KEY, POLICY_LOSS_KEY, VF_LOSS_KEY, Learner
 from ray.rllib.core.learner.tf.tf_learner import TfLearner
 from ray.rllib.core.learner.torch.torch_learner import TorchLearner
-from ray.rllib.policy.sample_batch import MultiAgentBatch
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
+from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.policy.tf_mixins import (
     EntropyCoeffSchedule,
     KLCoeffMixin,
@@ -30,20 +39,19 @@ from ray.rllib.utils.typing import (
 )
 
 from config_types.args_types import CLIArgs
-from rllib_port.sympol.sympol_model import SympolRLModel
-from utils.get_action_and_value import get_action_and_value, get_action_and_value2
 from utils.ppo import compute_gae, update_ppo
 
+from ._jax_compute_loss_for_module import make_jax_compute_loss_function
 from ._sample_batch_to_storage import batch_to_storage
 
 if TYPE_CHECKING:
     from collections.abc import Hashable
 
+    import chex
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.algorithms.ppo.ppo import PPOConfig
     from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
     from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
-    from ray.rllib.policy.sample_batch import SampleBatch
     from ray.rllib.utils.typing import (
         ModuleID,
         Optimizer,
@@ -53,7 +61,7 @@ if TYPE_CHECKING:
     )
 
     from mlp import Critic_MLP
-    from rllib_port.core.sympol_module import SympolPPOModule
+    from rllib_port.core.sympol_module import JaxPPOStateDict, SympolPPOModule
     from sdt import Critic_SDT
     from utils.utils import ActorTrainState, TrainState
 
@@ -83,6 +91,49 @@ class _NoTensorConverter(ConnectorV2):
         return batch
 
 
+class _LimitedToNumpyConverter(ConnectorV2):
+    """
+    Converts Jax arrays to numpy to pass trough the SampleBatch converter
+
+    Experimental might slow down the training;
+    jax -> numpy -> jax
+
+    Used for GAE results
+    """
+
+    def __call__(
+        self,
+        *,
+        rl_module: RLModule | MultiRLModule,  # noqa: ARG002
+        batch: dict[str, Any],
+        **kwargs,  # noqa: ARG002
+    ) -> Any:
+        # Code from NumpyToTensor
+
+        is_single_agent = False
+        is_multi_rl_module = isinstance(rl_module, MultiRLModule)
+        # `data` already a ModuleID to batch mapping format.
+        if not (is_multi_rl_module and all(c in rl_module._rl_modules for c in batch)):  # pyright: ignore[reportAttributeAccessIssue]
+            is_single_agent = True
+            batch = {DEFAULT_MODULE_ID: batch}
+
+        for module_id, module_data in batch.copy().items():
+            infos = module_data.pop(Columns.INFOS, None)
+            for k in ("advantages",):
+                module_data[k] = np.asarray(module_data[k])
+            if infos is not None:
+                module_data[Columns.INFOS] = infos
+            # Early out with data under(!) `DEFAULT_MODULE_ID`, b/c we are in plain
+            # single-agent mode.
+            if is_single_agent:
+                return module_data
+            batch[module_id] = module_data
+
+        return batch
+        # batch[Columns.ADVANTAGES] = jax.device_get(batch[Columns.ADVANTAGES])
+        # batch["value_targets"] = jax.device_get(batch["value_targets"])
+
+
 class JaxLearner(Learner):
     framework = "jax"
 
@@ -99,28 +150,7 @@ class JaxLearner(Learner):
         # possible use config["accumulate_grad_batches"]
         self._accumulate_gradients_every: int = config.rl_module_spec.model_config["accumulate_gradients_every"]
         self._accumulate_gradients_every_initial: int = config.rl_module_spec.model_config["accumulate_gradients_every"]
-
-    def compute_loss_for_module(
-        self,
-        *,
-        module_id: ModuleID,
-        config: "AlgorithmConfig",
-        batch: dict[str, Any],
-        fwd_out: dict[str, TensorType],
-    ) -> TensorType:
-        # HERE critic is evaluated
-        # PPOTorchLearner.compute_loss_for_module
-        module: SympolPPOModule = self.module[module_id].unwrapped()
-        logprob, entropy, value = get_action_and_value2(
-            module.states["actor"].params,
-            module.states["critic"].params,
-            fwd_out,
-            action=batch[Columns.ACTIONS],
-            action_type=module.model_config["action_type"],
-            actor=module.pi.model,
-            critic=module.vf.model,
-            actor_state_indices=module.states["actor"].indices,
-        )
+        self._states: dict[ModuleID, JaxPPOStateDict] = {}
 
     # calls configure_optimziers_for_module
     # def configure_optimizers(self) -> None:
@@ -132,7 +162,7 @@ class JaxLearner(Learner):
         # likely do not need these here
         actor_params, critic_params = self.get_parameters(module)  # Re-enable this line
         # Optimizer is set in init_state
-        self._states = module.get_state()
+        self._states[module_id] = module.get_state(inference_only=False)
 
         if False:
             self.register_optimizer(
@@ -149,34 +179,43 @@ class JaxLearner(Learner):
                 lr_or_lr_schedule=config.lr,
             )
 
-    def apply_gradients(self, gradients_dict: ParamDict) -> None:
-        logger.warning("get_param_ref called which is not fully implemented")
-        # critic
-        critic_grads = gradients_dict["critic"]
-        self._states["critic"] = self._states["critic"].apply_gradients(grads=critic_grads)
+    # jittable
+    def apply_gradients(
+        self,
+        states: dict[ModuleID, JaxPPOStateDict],
+        gradients_dict: dict[ModuleID, dict[Literal["actor", "critic"], Any]],
+    ) -> dict[ModuleID, JaxPPOStateDict]:
+        for module_id in self.module.keys():
+            module_grads = gradients_dict[module_id]
+            critic_grads = module_grads["critic"]
+            states[module_id]["critic"] = states[module_id]["critic"].apply_gradients(grads=critic_grads)
 
-        # actor
-        actor_grads = gradients_dict["actor"]
-        actor_grad_accum = jax.tree_util.tree_map(lambda x, y: x + y, actor_grads, self._states["actor"].grad_accum)
-        actor_state: ActorTrainState = self._states["actor"].apply_gradients(grads=actor_grads)
-
-        def update_fn():
-            grads = jax.tree_util.tree_map(lambda x: x / self._accumulate_gradients_every, actor_grad_accum)
-            new_state = actor_state.apply_gradients(
-                grads=grads,
-                grad_accum=jax.tree_util.tree_map(jnp.zeros_like, grads),
+            # actor
+            actor_grads = module_grads["actor"]
+            actor_grad_accum = jax.tree_util.tree_map(
+                lambda x, y: x + y, actor_grads, states[module_id]["actor"].grad_accum
             )
-            return new_state
+            actor_state: ActorTrainState = states[module_id]["actor"].apply_gradients(grads=actor_grads)
 
-        actor_state = jax.lax.cond(
-            actor_state.step % self._accumulate_gradients_every == 0,
-            lambda _: update_fn(),
-            lambda _: actor_state.replace(grad_accum=actor_grad_accum, step=actor_state.step + 1),
-            None,
-        )
-        self._states["actor"] = actor_state
+            def update_fn():
+                grads = jax.tree_util.tree_map(lambda x: x / self._accumulate_gradients_every, actor_grad_accum)
+                new_state = actor_state.apply_gradients(
+                    grads=grads,
+                    grad_accum=jax.tree_util.tree_map(jnp.zeros_like, grads),
+                )
+                return new_state
+
+            actor_state = jax.lax.cond(
+                actor_state.step % self._accumulate_gradients_every == 0,
+                lambda _: update_fn(),
+                lambda _: actor_state.replace(grad_accum=actor_grad_accum, step=actor_state.step + 1),
+                None,
+            )
+            states[module_id]["actor"] = actor_state
+        return states
 
     def get_parameters(self, module: SympolPPOModule | Any) -> tuple[Sequence[Param], Sequence[Param]]:
+        logger.warning("get_parameters called which is not fully implemented")
         return list(module.states["actor"].params), list(module.states["critic"].params)
 
     def get_param_ref(self, param: Param) -> Hashable:
@@ -185,7 +224,12 @@ class JaxLearner(Learner):
 
     def compute_gradients(self, loss_per_module: dict[ModuleID, Any], **kwargs) -> ParamDict:
         # TODO: Can this be its own function?
-        return super().compute_gradients(loss_per_module, **kwargs)
+        logger.warning("compute_gradients called which is not used in the jax implementation")
+        if 0:
+            TorchLearner.compute_gradients
+            TfLearner.compute_gradients
+            return super().compute_gradients(loss_per_module, **kwargs)
+        raise NotImplementedError("compute_gradients not implemented for jax")
 
     def _convert_batch_type(self, batch: MultiAgentBatch) -> MultiAgentBatch:
         # TODO: put on device
@@ -197,7 +241,15 @@ class JaxLearner(Learner):
     @staticmethod
     def _get_clip_function():
         logger.warning("_get_clip_function called which is not fully implemented")
-        return super(JaxLearner)._get_clip_function()
+        if 0:
+            # returns
+            from ray.rllib.utils.tf_utils import clip_gradients
+            from ray.rllib.utils.torch_utils import clip_gradients
+        # possibly use optax.clip; but needs to be in transformation pipeline
+        from ray_utilities.jax.math import clip_gradient
+
+        # Has wrong interface
+        return clip_gradient
 
     @staticmethod
     def _get_global_norm_function() -> Any:
@@ -205,11 +257,15 @@ class JaxLearner(Learner):
         return super(JaxLearner)._get_global_norm_function()
 
     def _get_tensor_variable(self, value: Any, dtype: Any = None, trainable: bool = False) -> TensorType:
-        logger.warning("_get_tensor_variable called which is not fully implemented")
+        # TODO: is kl_coeffs a variable that is learned?
+        logger.warning("_get_tensor_variable called which is not fully implemented", stacklevel=2)
         if 0:
             TorchLearner._get_tensor_variable(value, dtype, trainable)
             TfLearner._get_tensor_variable(value, dtype, trainable)
-        return super()._get_tensor_variable(value, dtype, trainable)
+        v = jnp.array(value, dtype=dtype)
+        if not trainable:
+            v = jax.lax.stop_gradient(v)
+        return v
 
     @staticmethod
     def _get_optimizer_lr(optimizer: Optimizer) -> float:
@@ -219,6 +275,8 @@ class JaxLearner(Learner):
     @staticmethod
     def _set_optimizer_lr(optimizer: Optimizer, lr: float) -> None:
         logger.warning("_set_optimizer_lr called which is not fully implemented")
+        # Needs to change opt_state
+        # TODO: reduce lr not implemented
         super(JaxLearner)._set_optimizer_lr(optimizer, lr)
 
     def _get_optimizer_state(self, *args, **kwargs):
@@ -229,6 +287,7 @@ class JaxLearner(Learner):
 class JaxPPOLearner(RayPPOLearner, JaxLearner):
     def build(self, **kwargs) -> None:
         super().build(**kwargs)
+        self._legacy = self.config.learner_config_dict.get("legacy", True)
         self._rng_key = self.config.learner_config_dict["rng_key"]
         if self._learner_connector is not None and (self.config.add_default_connectors_to_learner_pipeline):
             # super().build adds (PPO) AddOneTsToEpisodesAndTruncate, GeneralAdvantageEstimation
@@ -248,112 +307,53 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                 if idx >= 0:
                     con = cast("GeneralAdvantageEstimation", self._learner_connector.connectors[idx])
                     con._numpy_to_tensor_connector = _NoTensorConverter()  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]
+                    # TODO: if using no converter need monkeypatch; maybe convert there
+                    # con._numpy_to_tensor_connector = _LimitedToNumpyConverter()  # pyright: ignore[reportPrivateUsage]
             # not needed anymore; state passed to self.vf(obs, state=state)
             # self._learner_connector.append(RemoveStateFromBatch())
+        self._compute_loss_for_modules = {
+            module_id: make_jax_compute_loss_function(
+                module,  # pyright: ignore[reportArgumentType]
+                self.config,  # pyright: ignore[reportArgumentType]
+            )
+            for module_id, module in self.module.items()
+        }
+        self._forward_with_grads = jax.jit(jax.value_and_grad(self._jax_forward_pass, has_aux=True, argnums=(0,)))
+        self._update_jax = jax.jit(self._update_jax)
 
-    def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
-        """
-        Calls a.o.
-        fwd_out = self.module.forward_train(batch)
-        loss_per_module = self.compute_losses(fwd_out=fwd_out, batch=batch)
-        gradients = self.compute_gradients(loss_per_module)
-        postprocessed_gradients = self.postprocess_gradients(gradients)
-        self.apply_gradients(postprocessed_gradients)
-        """
-        # possibly use jit and wrap them all
-        TfLearner._untraced_update
-        TorchLearner._uncompiled_update
-        # get them from somewhere else?
-        self.metrics.activate_tensor_mode()
-        # fwd_out = self.module.forward_train(batch)
+    def _legacy_update(self, batch: dict[str, Any] | SampleBatch) -> tuple[Any, Any]:
         fwd_out = dict.fromkeys(batch.keys(), None)
-
-        # Use compute_losses for whole module
-        if 0:
-            loss_per_module = self.compute_losses(fwd_out=fwd_out, batch=batch)
-            # calls
-            self.compute_loss_for_module
-        # However that makes less use of jit:
-
         loss_per_module = dict.fromkeys(batch.keys(), None)
-        if 0:
-            fwd_out = {
-                mid: self.module._rl_modules[mid]._forward_train(batch[mid], **kwargs)
-                for mid in batch.keys()
-                if mid in self.module
-            }
         for module_id, module_batch in batch.items():
             # Length of the batch entries is minibatch size
             # keys liekely embeddings and "action_dist_inputs"
             # variables:
-            module: SympolPPOModule = self.module[module_id]
+            module: SympolPPOModule = self.module[module_id]  # pyright: ignore[reportAssignmentType]
             actor_state: ActorTrainState = module.states["actor"]
-            critic_state: TrainState = self._states["critic"]
+            critic_state: TrainState = module.states["critic"]
             actor = module.pi.model
             critic: Critic_SDT | Critic_MLP = module.vf.model
 
-            args: CLIArgs = CLIArgs(**{k: v for k, v in module.model_config.items() if k in CLIArgs.__annotations__})  # pyright: ignore[reportArgumentType]
+            args: CLIArgs = CLIArgs(
+                **{  # pyright: ignore[reportArgumentType]
+                    k: v for k, v in module.model_config.items() if k in CLIArgs.__annotations__
+                }
+            )
             args.n_envs = 1
             # key used to permutate the batch
             self._rng_key, key = jax.random.split(self._rng_key, 2)
-            next_obs = module_batch[Columns.OBS]
-            next_done = jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS])
             if False:
-                storage = batch_to_storage(
-                    module_batch,
-                    advantages=None and module_batch[Columns.ADVANTAGES],
-                    values=None and module_batch[Columns.VF_PREDS],
-                    returns=None and module_batch[Columns.VALUE_TARGETS],
-                )
-
-                def print_values(msg):
-                    return
-                    print("Storage", msg, storage.values.shape, ":\n", storage.values[jnp.array([0, -1])])
-
-                print_values("initial")
-
-                for i, (next_obs, next_done) in enumerate(
-                    zip(
-                        module_batch[Columns.OBS],
-                        jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS]),
-                    )
-                ):
-                    storage, action, key = get_action_and_value(
-                        actor_state.params,
-                        critic_state,
-                        next_obs,
-                        next_done,
-                        storage,
-                        i,
-                        key,
-                        action_type=args.action_type,
-                        actor=actor,
-                        critic=critic,
-                        actor_state_indices=actor_state.indices,
-                    )
-
-                # storage, action, key = module.get_action_and_value(next_obs, next_done, key, step=0)
-
-                # TODO: Need values from actions; but value into batch
-                # returns = advantages + values
-                # rlllib: advantages = module_value_targets - module_vf_preds
-                # => returns = advantages + module_vf_preds = module_value_targets
-
-                # NOTE: Alternatively remove the Gae connector and compute critic output and gae here.
-                # In original code, next_obs, next_done are the outputs of the n_envs, e.g. length 8
-
-                print_values("after rollout")
-                storage = compute_gae(critic_state, next_obs, next_done, storage, critic=critic, args=args)
-                print_values("with gae")
+                next_obs = module_batch[Columns.OBS]
+                next_done = jnp.logical_or(module_batch[Columns.TERMINATEDS], module_batch[Columns.TRUNCATEDS])
+                # full legacy use compute_action_and_value + gae
 
             storage2 = batch_to_storage(
                 module_batch,
                 advantages=module_batch[Columns.ADVANTAGES],
-                values=module_batch[Columns.VF_PREDS],
+                # TODO: could get GAE via jax here. - test speed
+                # values=module_batch.get(Columns.VF_PREDS, None),  # <- not needed if we have gae
                 returns=module_batch[Columns.VALUE_TARGETS],
             )
-
-            # breakpoint()
 
             actor_state, critic_state, loss, policy_loss, v_loss, entropy_loss, approx_kl, key = update_ppo(
                 actor_state,
@@ -374,11 +374,244 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             module.states["critic"] = critic_state
             module.states["module_key"] = key
             loss_per_module[module_id] = loss.mean()
+        return fwd_out, loss_per_module
+
+    @staticmethod
+    def _get_state_parameters(
+        states: dict[ModuleID, JaxPPOStateDict],
+    ) -> dict[ModuleID, dict[Literal["actor", "critic"], Any]]:
+        parameters: dict[ModuleID, dict[Literal["actor", "critic"], Any]] = dict.fromkeys(
+            states.keys(), cast("dict", None)
+        )
+        for module_id, state in states.items():
+            parameters[module_id] = {
+                "actor": state["actor"].params,
+                "critic": state["critic"].params,
+            }
+        return parameters
+
+    def compute_loss_for_module(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        *,
+        critic_state_params: Optional[jax.Array],
+        module_id: ModuleID,
+        config: "PPOConfig",
+        batch: SampleBatch | dict[str, Any],
+        fwd_out: dict[str, TensorType],
+        curr_entropy_coeff: float,
+        curr_kl_coeff: Optional[float],
+    ) -> tuple[TensorType, dict[str, chex.Numeric]]:
+        # TODO: need to move outside jax
+        # TODO: Why is there a Loss Mask?
+        # fwd_out = {k: v if not isinstance(v, SampleBatch) else dict(v) for k, v in fwd_out.items()}
+        (
+            total_loss,
+            (
+                mean_entropy,
+                mean_vf_loss,
+                mean_vf_unclipped_loss,
+                variance_explained,
+                policy_loss_key,
+                mean_kl_loss,
+            ),
+        ) = self._compute_loss_for_modules[module_id](
+            # batch is a SampleBatch which is not compatible
+            critic_state_params if critic_state_params is not None else self._states[module_id]["critic"].params,
+            batch=batch,
+            fwd_out=fwd_out,
+            curr_entropy_coeffs=curr_entropy_coeff,
+            curr_kl_coeffs=curr_kl_coeff,
+        )
+        # legacy vs rllib implementation:
+        # entropy == curr_entropy; logprop == batch[Columns.ACTION_LOGP]; value_fn_out==value
+        """
+        logprob, entropy, value = get_action_and_value2(
+            module.states["actor"].params,
+            module.states["critic"].params,
+            batch[Columns.OBS],
+            action=batch[Columns.ACTIONS],
+            action_type=module.model_config["action_type"],
+            actor=module.pi.model,
+            critic=module.vf.model,
+            actor_state_indices=module.states["actor"].indices,
+        )
+        """
+
+        # Return the total loss.
+        return total_loss, {
+            POLICY_LOSS_KEY: policy_loss_key,
+            VF_LOSS_KEY: mean_vf_loss,
+            LEARNER_RESULTS_VF_LOSS_UNCLIPPED_KEY: mean_vf_unclipped_loss,
+            LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY: variance_explained,
+            ENTROPY_KEY: mean_entropy,
+            LEARNER_RESULTS_KL_KEY: mean_kl_loss,
+        }
+
+    def compute_losses(self, *, fwd_out: ResultDict[str, Any], batch: ResultDict[str, Any]):
+        """
+        NOTE:
+            Use _jax_compute_losses instead of this function to compute gradients
+        """
+        logger.warning("compute_losses called, which makes no use of jit - additional step in shedule")
+        curr_entropy_coeffs, curr_kl_coeffs = self._generate_curr_coeffs()
+        loss_per_module, aux_data = self._jax_compute_losses(
+            parameters=self._get_state_parameters(self._states),
+            fwd_out=fwd_out,
+            batch=batch,
+            curr_entropy_coeffs=curr_entropy_coeffs,
+            curr_kl_coeffs=curr_kl_coeffs,
+        )
+        return loss_per_module
+
+    def _jax_compute_losses(
+        self,
+        parameters: dict[ModuleID, dict[Literal["actor", "critic"], jax.Array]],
+        fwd_out: dict[str, Any],
+        batch: dict[str, Any],
+        curr_entropy_coeffs: dict[ModuleID, float],
+        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+    ):
+        loss_per_module = {}
+        aux_data = {}
+        from ray.rllib.core.rl_module.apis import SelfSupervisedLossAPI
+
+        for module_id, module_state in parameters.items():
+            module_batch = batch[module_id]
+            module_fwd_out = fwd_out[module_id]
+            module = self.module[module_id].unwrapped()
+            if isinstance(module, SelfSupervisedLossAPI):
+                logger.error("Self-supervised loss not implemented with jax suport")
+                loss = module.compute_self_supervised_loss(
+                    learner=self,
+                    module_id=module_id,
+                    config=self.config.get_config_for_module(module_id),
+                    batch=module_batch,
+                    fwd_out=module_fwd_out,
+                )
+            else:
+                loss, aux = self.compute_loss_for_module(
+                    module_id=module_id,
+                    config=self.config.get_config_for_module(module_id),  # pyright: ignore[reportArgumentType]
+                    batch=dict(module_batch),
+                    fwd_out=module_fwd_out,
+                    critic_state_params=module_state["critic"],
+                    curr_entropy_coeff=curr_entropy_coeffs[module_id],
+                    curr_kl_coeff=curr_kl_coeffs[module_id] if curr_kl_coeffs else None,
+                )
+                aux_data[module_id] = aux
+            loss_per_module[module_id] = loss
+
+        return loss_per_module, aux_data
+
+    def _forward_train_call(
+        self, batch, parameters: dict[ModuleID, dict[Literal["actor", "critic"], jax.Array]], **kwargs
+    ):
+        """jittable"""
+        fwd_out = {
+            mid: cast("SympolPPOModule", self.module._rl_modules[mid])._forward_train(
+                batch[mid], parameters=parameters[mid]["actor"], **kwargs
+            )
+            for mid in batch.keys()
+            if mid in self.module
+        }
+        return fwd_out
+
+    # NOTE: do not pass indices as states
+    # @jax.jit
+    # @partial(jax.value_and_grad, has_aux=True, argnums=(0,))
+    def _jax_forward_pass(
+        self,
+        parameters: dict[ModuleID, dict[Literal["actor", "critic"], jax.Array]],
+        batch: dict[str, Any],
+        curr_entropy_coeffs: dict[ModuleID, float],
+        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+    ):
+        """
+        Note:
+            do not use directly use _forward_with_grads
+        """
+        fwd_out = self._forward_train_call(batch, parameters=parameters)
+        loss_per_module, compute_loss_aux = self._jax_compute_losses(
+            parameters, fwd_out, batch, curr_entropy_coeffs, curr_kl_coeffs
+        )
+        # gradient needs a scalar loss:
+        return jax.tree.reduce(jnp.sum, loss_per_module), (fwd_out, loss_per_module, compute_loss_aux)
+
+    def _update_jax(
+        self,
+        states: dict[ModuleID, JaxPPOStateDict],
+        batch: dict[str, Any],
+        curr_entropy_coeffs: dict[ModuleID, float],
+        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+    ) -> tuple[dict[ModuleID, JaxPPOStateDict], tuple[Any, dict[ModuleID, chex.Numeric], dict[str, Any]]]:
+        parameters = self._get_state_parameters(states)
+        (_all_losses_combined, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)), (gradients,) = (
+            self._forward_with_grads(parameters, batch, curr_entropy_coeffs, curr_kl_coeffs)  # pyright: ignore[reportArgumentType]
+        )
         if 0:
-            PPOTorchLearner.compute_loss_for_module
-            super().compute_losses
-            TorchLearner._update(self, batch, **kwargs)
-            fwd_out, loss_per_module, tensor_metrics = TfLearner._update(self, batch, **kwargs)
+            # consider if implementation is necessary
+            self.postprocess_gradients_for_module
+            postprocessed_gradients: dict = self.postprocess_gradients(gradients)
+        else:
+            postprocessed_gradients = gradients
+        new_states = self.apply_gradients(states, postprocessed_gradients)
+        return new_states, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)
+
+    def _generate_curr_coeffs(self):
+        curr_entropy_coeffs = {}
+        curr_kl_coeffs = {}
+        for module_id in self.module.keys():
+            curr_entropy_coeffs[module_id] = self.entropy_coeff_schedulers_per_module[module_id].get_current_value()
+            if self.config.get_config_for_module(module_id):  # TODO: This s
+                curr_kl_coeffs[module_id] = self.curr_kl_coeffs_per_module[module_id]
+            else:
+                curr_kl_coeffs[module_id] = 0.0
+        return curr_entropy_coeffs, curr_kl_coeffs
+
+    def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
+        """
+        Calls a.o.
+        fwd_out = self.module.forward_train(batch)
+        loss_per_module = self.compute_losses(fwd_out=fwd_out, batch=batch)
+        gradients = self.compute_gradients(loss_per_module)
+        postprocessed_gradients = self.postprocess_gradients(gradients)
+        self.apply_gradients(postprocessed_gradients)
+        """
+        # possibly use jit and wrap them all
+        if 0:
+            TfLearner._untraced_update
+            TorchLearner._uncompiled_update
+        # get them from somewhere else?
+        self.metrics.activate_tensor_mode()
+        # fwd_out = self.module.forward_train(batch)
+        # Cannot pass SampleBatch as input
+        if self._legacy:
+            # NOTE: Performs PPO update already; updates states in place
+            # Does NOT fill fwd_out
+            fwd_out, loss_per_module = self._legacy_update(batch, **kwargs)
+        else:
+            # TODO: fwd_out["default_policy"]["embeddings"] has many keys
+            curr_entropy_coeffs, curr_kl_coeffs = self._generate_curr_coeffs()
+            new_states, (fwd_out, loss_per_module, compute_loss_aux) = self._update_jax(
+                states=self._states,
+                batch={mid: dict(v) for mid, v in batch.items()},
+                curr_entropy_coeffs=curr_entropy_coeffs,
+                curr_kl_coeffs=curr_kl_coeffs,
+            )
+            self._states = new_states
+            self.module.set_state(self._states)
+
+            # Log important loss stats.
+            # FIXME: move outside jit
+            for module_id in fwd_out.keys():
+                self.metrics.log_dict(
+                    compute_loss_aux[module_id],
+                    key=module_id,
+                    window=1,  # <- single items (should not be mean/ema-reduced over time).
+                )
+
+        # However that makes less use of jit:
+
         return fwd_out, loss_per_module, self.metrics.deactivate_tensor_mode()
 
     def _update_module_kl_coeff(

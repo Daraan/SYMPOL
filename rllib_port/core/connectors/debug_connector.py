@@ -91,15 +91,16 @@ class DebugConnector(ConnectorV2):
         metrics: Optional[MetricsLogger] = None,
         **kwargs,
     ) -> Any:
-        self._logger.warning(
-            "DebugConnector (%s): \nbatch=%s, \nepisodes=%s, \nexplore=%s, \nshared_data=%s, \nmetrics=%s\n--------",
-            self._name,
-            batch,
-            episodes,
-            explore,
-            shared_data,
-            metrics,
-        )
+        if False:
+            self._logger.warning(
+                "DebugConnector (%s): \nbatch=%s, \nepisodes=%s, \nexplore=%s, \nshared_data=%s, \nmetrics=%s\n--------",
+                self._name,
+                batch,
+                episodes,
+                explore,
+                shared_data,
+                metrics,
+            )
 
         self._logger.debug("DebugConnector called with batch: %s", batch)
         return batch
