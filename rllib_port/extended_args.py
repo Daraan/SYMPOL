@@ -30,7 +30,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         For JAX `None` is not a valid value.
     """
 
-    legacy: bool = True
+    legacy: bool = False
     """Use original SYMPOL implementation for PPO and btching"""
 
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
@@ -80,6 +80,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         return super().__setstate__(d)
 
     def process_args(self) -> None:
+        if self.adamW is True:
+            logger.error("AdamW is already True")
         if self.seed is None and type(self).seed is not None:
             logger.error("No seed found. But there should be one in the class. Should not happen.")
         self._process_args_sympol()
