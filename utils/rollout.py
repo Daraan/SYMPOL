@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Protocol
 from typing_extensions import Unpack, TypeAliasType
 
 import jax.numpy as jnp
@@ -22,6 +22,54 @@ if TYPE_CHECKING:
     _Actor = Actor_MLP | Actor_MLP_Continuous | Actor_SDT | SYMPOL_RL | PureJaxModelProtocol
     _Critic = Critic_MLP | Critic_SDT
 
+
+class UpdateNStepsArgs(Protocol):
+    total_steps: int
+    n_envs: int
+    dynamic_buffer: bool
+    static_batch: bool
+
+
+def update_buffer_and_rollout_size(
+    args: UpdateNStepsArgs,
+    *,
+    initial_steps: int,
+    global_step: int,
+    accumulate_gradients_every_initial: int,
+):
+    """
+    Calculates a new rollout and batch size
+
+    Afterwards create Rollout with `n_steps`
+    `if args.dynamic_buffer or not args.static_batch:` recalculate
+    Then if n_steps != n_steps_old: -> create rollout
+
+    If `args.dynamic_buffer` is True, the buffer size `n_steps` is increased.
+    Otherwise `n_steps == initial_steps`.
+    Otherwise only `batch_size` and `accumulate_gradients_every` are increased.
+    """
+    # increase_index = global_step // (args.total_steps//sum(increase_factor_list))
+    increase_factor = int(
+        2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
+    )  # int(increase_factor_list_long[increase_index])
+    increase_factor_batch = int(
+        2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
+    )  # int(increase_factor_list_long[increase_index])
+    if args.dynamic_buffer:
+        n_steps = initial_steps * increase_factor
+    else:
+        n_steps = initial_steps
+    if not args.static_batch:
+        accumulate_gradients_every = int(accumulate_gradients_every_initial * increase_factor_batch)
+    else:
+        accumulate_gradients_every = int(accumulate_gradients_every_initial)
+    # DYNAMIC_BATCH_SIZE
+    batch_size = int(args.n_envs * n_steps)  # XXX: Get rid of n_envs; samples_per_step
+    # n_iterations = args.total_steps // batch_size
+    # eval_freq = max(args.eval_freq // batch_size, 1)
+    return batch_size, accumulate_gradients_every, n_steps
+
+
 _RolloutSignature = TypeAliasType(
     "_RolloutSignature",
     """tuple[
@@ -31,7 +79,7 @@ _RolloutSignature = TypeAliasType(
 RolloutCallableType = TypeAliasType("RolloutCallableType", Callable[[Unpack[_RolloutSignature]], _RolloutSignature])
 
 
-def create_rollout(
+def create_rollout_function(
     n_steps, envs, *, args: CLIArgs, actor: _Actor, critic: _Critic, action_indices: list[int]
 ) -> RolloutCallableType:
     def rollout_(

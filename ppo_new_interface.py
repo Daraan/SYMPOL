@@ -30,7 +30,7 @@ from utils import (
 )
 from utils.evaluation import evaluate_agent
 from utils.ppo import compute_gae, update_ppo
-from utils.rollout import create_rollout
+from utils.rollout import create_rollout_function, update_buffer_and_rollout_size
 from utils.type_guard import is_stateActionDT
 
 if TYPE_CHECKING:
@@ -198,48 +198,35 @@ def train_agent(
 
         avg_episodic_return_list = []
         total_time_cleaned = 0
-        rollout: RolloutCallableType
 
         while global_step < args.total_steps:
             # for iteration in range(1, n_iterations + 1):
             wandb_log = {}
             # ALGO Logic: Storage setup
             # increase_index = global_step // (args.total_steps//len(increase_factor_list))
+            # region: update buffer and rollout size; create new rollout function
+            rollout: RolloutCallableType
             if args.dynamic_buffer or not args.static_batch:
-                # increase_index = global_step // (args.total_steps//sum(increase_factor_list))
-                increase_factor = int(
-                    2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
-                )  # int(increase_factor_list_long[increase_index])
-                increase_factor_batch = int(
-                    2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
-                )  # int(increase_factor_list_long[increase_index])
-                if args.dynamic_buffer:
-                    n_steps = initial_steps * increase_factor
-                else:
-                    n_steps = initial_steps
-                if not args.static_batch:
-                    accumulate_gradients_every = int(accumulate_gradients_every_initial * increase_factor_batch)
-                else:
-                    accumulate_gradients_every = int(accumulate_gradients_every_initial)
-                batch_size = int(args.n_envs * n_steps)
-                # n_iterations = args.total_steps // batch_size
-                # eval_freq = max(args.eval_freq // batch_size, 1)
-                current_eval = global_step // args.eval_freq
+                batch_size, accumulate_gradients_every, n_steps = update_buffer_and_rollout_size(
+                    args,
+                    initial_steps=initial_steps,
+                    global_step=global_step,
+                    accumulate_gradients_every_initial=accumulate_gradients_every_initial,
+                )
                 if n_steps != n_steps_old:
                     # compute_gae  = create_compute_gae(n_steps)
                     # update_ppo = create_update_ppo(batch_size, minibatch_size, accumulate_gradients_every)
-                    rollout = create_rollout(
+                    rollout = create_rollout_function(
                         n_steps, envs, args=args, actor=actor, critic=critic, action_indices=action_indices
                     )
                     n_steps_old = n_steps
-            else:
-                if global_step == 0:
-                    # compute_gae  = create_compute_gae(n_steps)
-                    # update_ppo = create_update_ppo(batch_size, minibatch_size, accumulate_gradients_every)
-                    rollout = create_rollout(
-                        n_steps, envs, args=args, actor=actor, critic=critic, action_indices=action_indices
-                    )
-                current_eval = global_step // args.eval_freq
+            elif global_step == 0:
+                # compute_gae  = create_compute_gae(n_steps)
+                # update_ppo = create_update_ppo(batch_size, minibatch_size, accumulate_gradients_every)
+                rollout = create_rollout_function(
+                    n_steps, envs, args=args, actor=actor, critic=critic, action_indices=action_indices
+                )
+            current_eval = global_step // args.eval_freq
             start_time_cleaned = time.time()
 
             if TYPE_CHECKING:
