@@ -96,12 +96,12 @@ class StorageNoValues:
                 f"actions {self.actions.shape}={format_array(self.actions)},\n"
                 f"logprobs {self.logprobs.shape}={format_array(self.logprobs)},\n"
                 f"dones {self.dones.shape}={format_array(self.dones)},\n"
-                f"values {self.values.shape}={format_array(self.values)},\n" if hasattr(self, "values") else "" # pyright: ignore[reportAttributeAccessIssue] # fmt: skip
+                f"values {self.values.shape}={format_array(self.values)},\n" if hasattr(self, "values") else "" # pyright: ignore[reportAttributeAccessIssue]
                 f"advantages {self.advantages.shape}={format_array(self.advantages)},\n"
                 f"returns {self.returns.shape}={format_array(self.returns)},\n"
                 f"rewards {self.rewards.shape}={format_array(self.rewards)}\n"
                 f")"
-            )
+            )  # fmt: skip
         except Exception as e:  # noqa: BLE001
             return f"Error in __repr__: {e!s}" + super().__repr__()
 
@@ -113,12 +113,12 @@ class StorageNoValues:
                 f"actions={format_array(self.actions)},\n"
                 f"logprobs={format_array(self.logprobs)},\n"
                 f"dones={format_array(self.dones)},\n"
-                f"values={format_array(self.values)},\n" if hasattr(self, "values") else ""  # pyright: ignore[reportAttributeAccessIssue] # fmt: skip
+                f"values={format_array(self.values)},\n" if hasattr(self, "values") else ""  # pyright: ignore[reportAttributeAccessIssue]
                 f"advantages={format_array(self.advantages)},\n"
                 f"returns={format_array(self.returns)},\n"
                 f"rewards={format_array(self.rewards)}\n"
                 f")"
-            )
+            )  # fmt: skip
         except Exception as e:  # noqa: BLE001
             return f"Error in __repr__: {e!s}" + super().__repr__()
 

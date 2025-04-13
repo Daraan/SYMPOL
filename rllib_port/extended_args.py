@@ -31,7 +31,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     """
 
     legacy: bool = False
-    """Use original SYMPOL implementation for PPO and btching"""
+    """Use original SYMPOL implementation for PPO and batching"""
 
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args

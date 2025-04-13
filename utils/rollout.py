@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Protocol
-from typing_extensions import Unpack, TypeAliasType
 
 import jax.numpy as jnp
+import numpy as np
+from typing_extensions import TypeAliasType, Unpack
 
 from utils.get_action_and_value import get_action_and_value
-import numpy as np
 
 if TYPE_CHECKING:
-    from ray_utilities.jax.jax_model import PureJaxModelProtocol
     import chex
+    import gymnasium as gym
     from numpy.typing import NDArray
 
     from config_types.args_types import CLIArgs
     from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
+    from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
     from sympol import SYMPOL_RL
     from utils.utils import ActorTrainState, EpisodeStatistics, Storage, TrainState
@@ -80,7 +81,13 @@ RolloutCallableType = TypeAliasType("RolloutCallableType", Callable[[Unpack[_Rol
 
 
 def create_rollout_function(
-    n_steps, envs, *, args: CLIArgs, actor: _Actor, critic: _Critic, action_indices: list[int]
+    n_steps: int,
+    envs: gym.vector.VectorEnv,
+    *,
+    args: CLIArgs,
+    actor: _Actor,
+    critic: _Critic,
+    action_indices: list[int],
 ) -> RolloutCallableType:
     def rollout_(
         actor_state: ActorTrainState,
@@ -114,7 +121,7 @@ def create_rollout_function(
                 for substring in ["MultiRoom", "Unlock", "GoToDoor", "UnlockPickup", "DoorKey", "RedBlueDoors"]
             ):
                 action = np.array([action_indices[single_action] for single_action in action])
-            next_obs, reward, next_done, trunc, info = envs.step(action)
+            next_obs, reward, next_done, trunc, _info = envs.step(action)
             new_episode_return = episode_stats.episode_returns + reward
             new_episode_length = episode_stats.episode_lengths + 1
             episode_stats = episode_stats.replace(

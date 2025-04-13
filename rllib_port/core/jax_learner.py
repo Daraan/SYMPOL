@@ -61,9 +61,12 @@ if TYPE_CHECKING:
     )
 
     from mlp import Critic_MLP
+    from ray_utilities.typing.jax import type_grad_and_value
     from rllib_port.core.sympol_module import JaxPPOStateDict, SympolPPOModule
     from sdt import Critic_SDT
     from utils.utils import ActorTrainState, TrainState
+
+    jax.jit = lambda func, *args, **kwargs: func  # noqa: ARG005
 
 
 __all__ = [
@@ -144,19 +147,21 @@ class JaxLearner(Learner):
         module_spec: Optional[RLModuleSpec | MultiRLModuleSpec] = None,
         module: Optional[RLModule] = None,
     ):
+        # calls configure_optimziers_for_module
         super().__init__(config=config, module_spec=module_spec, module=module)
         # Should use learner config
         # TODO
         # possible use config["accumulate_grad_batches"]
-        self._accumulate_gradients_every: int = config.rl_module_spec.model_config["accumulate_gradients_every"]
-        self._accumulate_gradients_every_initial: int = config.rl_module_spec.model_config["accumulate_gradients_every"]
+        self._accumulate_gradients_every: int = config.learner_config_dict["accumulate_gradients_every"]
+        self._accumulate_gradients_every_initial: int = config.learner_config_dict["accumulate_gradients_every"]
+        # XXX Possibly do not keep them and access via self.module!
         self._states: dict[ModuleID, JaxPPOStateDict] = {}
 
     # calls configure_optimziers_for_module
     # def configure_optimizers(self) -> None:
     #    return super().configure_optimizers()
 
-    def configure_optimizers_for_module(self, module_id: ModuleID, config: "AlgorithmConfig" = None) -> None:
+    def configure_optimizers_for_module(self, module_id: ModuleID, config: "AlgorithmConfig") -> None:
         # MAYBE NOT NEEDED
         module: SympolPPOModule = self._module[module_id]  # type: ignore[assignment]
         # likely do not need these here
@@ -182,8 +187,10 @@ class JaxLearner(Learner):
     # jittable
     def apply_gradients(
         self,
-        states: dict[ModuleID, JaxPPOStateDict],
+        # Normally dict[Hashable | ParamRef, Param]
         gradients_dict: dict[ModuleID, dict[Literal["actor", "critic"], Any]],
+        *,
+        states: dict[ModuleID, JaxPPOStateDict],
     ) -> dict[ModuleID, JaxPPOStateDict]:
         for module_id in self.module.keys():
             module_grads = gradients_dict[module_id]
@@ -197,7 +204,7 @@ class JaxLearner(Learner):
             )
             actor_state: ActorTrainState = states[module_id]["actor"].apply_gradients(grads=actor_grads)
 
-            def update_fn():
+            def update_fn(actor_state=actor_state, actor_grad_accum=actor_grad_accum):
                 grads = jax.tree_util.tree_map(lambda x: x / self._accumulate_gradients_every, actor_grad_accum)
                 new_state = actor_state.apply_gradients(
                     grads=grads,
@@ -208,7 +215,9 @@ class JaxLearner(Learner):
             actor_state = jax.lax.cond(
                 actor_state.step % self._accumulate_gradients_every == 0,
                 lambda _: update_fn(),
-                lambda _: actor_state.replace(grad_accum=actor_grad_accum, step=actor_state.step + 1),
+                lambda _, actor_state=actor_state, actor_grad_accum=actor_grad_accum: actor_state.replace(
+                    grad_accum=actor_grad_accum, step=actor_state.step + 1
+                ),
                 None,
             )
             states[module_id]["actor"] = actor_state
@@ -219,16 +228,13 @@ class JaxLearner(Learner):
         return list(module.states["actor"].params), list(module.states["critic"].params)
 
     def get_param_ref(self, param: Param) -> Hashable:
+        # Reference to param: self._params[param_ref] = param
         logger.warning("get_param_ref called which is not fully implemented")
         return param
 
-    def compute_gradients(self, loss_per_module: dict[ModuleID, Any], **kwargs) -> ParamDict:
+    def compute_gradients(self, *args, **kwargs) -> ParamDict:  # noqa: ARG002
         # TODO: Can this be its own function?
         logger.warning("compute_gradients called which is not used in the jax implementation")
-        if 0:
-            TorchLearner.compute_gradients
-            TfLearner.compute_gradients
-            return super().compute_gradients(loss_per_module, **kwargs)
         raise NotImplementedError("compute_gradients not implemented for jax")
 
     def _convert_batch_type(self, batch: MultiAgentBatch) -> MultiAgentBatch:
@@ -318,7 +324,10 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             )
             for module_id, module in self.module.items()
         }
-        self._forward_with_grads = jax.jit(jax.value_and_grad(self._jax_forward_pass, has_aux=True, argnums=(0,)))
+        if TYPE_CHECKING:
+            self._forward_with_grads = type_grad_and_value(self._jax_forward_pass)
+        else:
+            self._forward_with_grads = jax.jit(jax.value_and_grad(self._jax_forward_pass, has_aux=True, argnums=(0,)))
         self._update_jax = jax.jit(self._update_jax)
 
     def _legacy_update(self, batch: dict[str, Any] | SampleBatch) -> tuple[Any, Any]:
@@ -334,6 +343,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             actor = module.pi.model
             critic: Critic_SDT | Critic_MLP = module.vf.model
 
+            # Need a NameSpace and not a dict
             args: CLIArgs = CLIArgs(
                 **{  # pyright: ignore[reportArgumentType]
                     k: v for k, v in module.model_config.items() if k in CLIArgs.__annotations__
@@ -368,8 +378,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                 critic=critic,
                 actor_state_indices=actor_state.indices,
             )
-            # print_values("final")
-            # Update states
+            # Keeps dict in sync, TODO: should not rely on this and use module.set_state
             module.states["actor"] = actor_state
             module.states["critic"] = critic_state
             module.states["module_key"] = key
@@ -395,15 +404,14 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         *,
         critic_state_params: Optional[jax.Array],
         module_id: ModuleID,
-        config: "PPOConfig",
+        config: "AlgorithmConfig | PPOConfig",  # noqa: ARG002
         batch: SampleBatch | dict[str, Any],
         fwd_out: dict[str, TensorType],
         curr_entropy_coeff: float,
         curr_kl_coeff: Optional[float],
     ) -> tuple[TensorType, dict[str, chex.Numeric]]:
-        # TODO: need to move outside jax
+        # jittable and grad wrt critic_state_params
         # TODO: Why is there a Loss Mask?
-        # fwd_out = {k: v if not isinstance(v, SampleBatch) else dict(v) for k, v in fwd_out.items()}
         (
             total_loss,
             (
@@ -422,20 +430,6 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             curr_entropy_coeffs=curr_entropy_coeff,
             curr_kl_coeffs=curr_kl_coeff,
         )
-        # legacy vs rllib implementation:
-        # entropy == curr_entropy; logprop == batch[Columns.ACTION_LOGP]; value_fn_out==value
-        """
-        logprob, entropy, value = get_action_and_value2(
-            module.states["actor"].params,
-            module.states["critic"].params,
-            batch[Columns.OBS],
-            action=batch[Columns.ACTIONS],
-            action_type=module.model_config["action_type"],
-            actor=module.pi.model,
-            critic=module.vf.model,
-            actor_state_indices=module.states["actor"].indices,
-        )
-        """
 
         # Return the total loss.
         return total_loss, {
@@ -525,7 +519,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         batch: dict[str, Any],
         curr_entropy_coeffs: dict[ModuleID, float],
         curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
-    ):
+    ) -> tuple[chex.Numeric, tuple[Any, dict[ModuleID, chex.Numeric], dict[str, Any]]]:
         """
         Note:
             do not use directly use _forward_with_grads
@@ -545,6 +539,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
     ) -> tuple[dict[ModuleID, JaxPPOStateDict], tuple[Any, dict[ModuleID, chex.Numeric], dict[str, Any]]]:
         parameters = self._get_state_parameters(states)
+        gradients: dict[ModuleID, dict[Literal["actor", "critic"], Any]]
         (_all_losses_combined, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)), (gradients,) = (
             self._forward_with_grads(parameters, batch, curr_entropy_coeffs, curr_kl_coeffs)  # pyright: ignore[reportArgumentType]
         )
@@ -554,7 +549,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             postprocessed_gradients: dict = self.postprocess_gradients(gradients)
         else:
             postprocessed_gradients = gradients
-        new_states = self.apply_gradients(states, postprocessed_gradients)
+        new_states = self.apply_gradients(postprocessed_gradients, states=states)
         return new_states, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)
 
     def _generate_curr_coeffs(self):
@@ -602,16 +597,12 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             self.module.set_state(self._states)
 
             # Log important loss stats.
-            # FIXME: move outside jit
             for module_id in fwd_out.keys():
                 self.metrics.log_dict(
                     compute_loss_aux[module_id],
                     key=module_id,
                     window=1,  # <- single items (should not be mean/ema-reduced over time).
                 )
-
-        # However that makes less use of jit:
-
         return fwd_out, loss_per_module, self.metrics.deactivate_tensor_mode()
 
     def _update_module_kl_coeff(
@@ -631,11 +622,6 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             config=config,
             kl_loss=kl_loss,
         )
-        if 0:
-            config.kl_target
-            self.curr_kl_coeffs_per_module[module_id]
-            # needs; but not implemented
-            self._get_tensor_variable
 
 
 # pyright: reportAbstractUsage=information

@@ -92,10 +92,12 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
         return batch_size
 
     @classmethod
-    def apply_legacy_settings(cls, config: AlgorithmConfig | PPOConfig, args: SympolArgumentParser) -> None:
+    def apply_legacy_settings(cls, config: AlgorithmConfig | PPOConfig, args: SympolArgumentParser | Any) -> None:
+        assert args.legacy
         config.training(
             num_epochs=1,  # passes over the batch_size data; handled by update_ppo
             learner_config_dict={"legacy_minibatch_size": args.minibatch_size, "legacy": True},
+            # Minibatching is done within the learner, EnvRunners should create new rollout every time.
             minibatch_size=args.train_batch_size_per_learner,
             train_batch_size_per_learner=args.train_batch_size_per_learner,
         )
@@ -104,6 +106,12 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
                 "Minibatch size (%s) is larger than train batch size (%s). Likely leads to errors.",
                 args.minibatch_size,
                 args.train_batch_size_per_learner,
+            )
+        if args.train_batch_size_per_learner % args.minibatch_size != 0:
+            logger.warning(
+                "Train batch size (%s) is not divisible by minibatch size (%s). This may lead to errors.",
+                args.train_batch_size_per_learner,
+                args.minibatch_size,
             )
 
     @classmethod
@@ -147,6 +155,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             # Legacy minibatches are done in the learner
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
+                "accumulate_gradients_every": args.accumulate_gradients_every,
                 "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
                 "legacy": args.legacy,
             },
