@@ -1285,8 +1285,9 @@ def train_agent(args: CLIArgs, trial: Optional[optuna.Trial] = None, queue: Opti
                         step_counter = 0
                         while not done and not trunc:
                             if args.render_env and render_now:
-                                frame = cast("NDArray", temp_env.render())
-
+                                # vector env returns a tuple
+                                frame = cast("NDArray | tuple[NDArray, ...]", temp_env.render())
+                                frame = np.squeeze(frame)
                                 image = Image.fromarray(frame)
                                 draw = ImageDraw.Draw(image)
                                 text_step = f"Step: {step_counter}"

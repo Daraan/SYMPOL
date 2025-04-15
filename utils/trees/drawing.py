@@ -147,7 +147,10 @@ def plot_decision_tree(
         else:
             env = cast("gym.Env", env)
             observation_space = env.observation_space
-            env_name = env.unwrapped.spec.id  # type: ignore[attr-defined]
+            if isinstance(env, gym.vector.SyncVectorEnv):
+                env_name = env.envs[0].unwrapped.spec.id  # type: ignore[attr-defined]
+            else:
+                env_name = env.unwrapped.spec.id  # type: ignore[attr-defined]
             if "MiniGrid" in env_name:
                 observation_space = cast("gym.spaces.Box", observation_space)  # best guess
                 ranges_dict = {}
