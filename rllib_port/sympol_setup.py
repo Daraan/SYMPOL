@@ -7,9 +7,10 @@ import jax
 from ray import tune
 
 import configs
-from ray_utilities import create_default_trainable
-from ray_utilities.config import ExperimentSetupBase
+from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.config.create_algorithm import create_algorithm_config
+from ray_utilities.config.experiment_base import ExperimentSetupBase
+from ray_utilities.default_trainable import create_default_trainable
 from rllib_port.core.connectors.env_to_module import make_env_to_module_without_numpy
 from rllib_port.core.connectors.module_to_env import make_jax_module_to_env_connector
 from rllib_port.core.jax_learner import JaxPPOLearner
@@ -156,8 +157,10 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
                 "accumulate_gradients_every": args.accumulate_gradients_every,
-                "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
+                "dynamic_buffer": args.dynamic_buffer,
+                "dynamic_batch": not args.static_batch,
                 "legacy": args.legacy,
+                "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
             },
         )
         # PPO specific training settings
@@ -172,6 +175,12 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
                 train_batch_size_per_learner=args.train_batch_size_per_learner,
             )
             assert not config.learner_config_dict.get("legacy")
+        if isinstance(config.callbacks_class, list):
+            config.callbacks_class.append(DynamicBufferUpdate)
+        elif getattr(config.callbacks_class, "IS_CALLBACK_CONTAINER", False):
+            config.callbacks_class._callback_list.append(DynamicBufferUpdate)  # type: ignore[attr-defined]
+        else:
+            config.callbacks(callbacks_class=[config.callbacks_class, DynamicBufferUpdate])
         # logging
         logger.info(
             "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",

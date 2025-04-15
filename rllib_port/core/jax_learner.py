@@ -224,12 +224,12 @@ class JaxLearner(Learner):
         return states
 
     def get_parameters(self, module: SympolPPOModule | Any) -> tuple[Sequence[Param], Sequence[Param]]:
-        logger.warning("get_parameters called which is not fully implemented")
+        logger.warning("JaxLearner.get_parameters called which is not fully implemented", stacklevel=2)
         return list(module.states["actor"].params), list(module.states["critic"].params)
 
     def get_param_ref(self, param: Param) -> Hashable:
         # Reference to param: self._params[param_ref] = param
-        logger.warning("get_param_ref called which is not fully implemented")
+        logger.warning("JaxLearner.get_param_ref called which is not fully implemented")
         return param
 
     def compute_gradients(self, *args, **kwargs) -> ParamDict:  # noqa: ARG002
@@ -565,6 +565,8 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
 
     def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
         """
+        NOTE: The amount of processed data is minibatch_size * epochs
+
         Calls a.o.
         fwd_out = self.module.forward_train(batch)
         loss_per_module = self.compute_losses(fwd_out=fwd_out, batch=batch)
