@@ -14,6 +14,7 @@ from ray.rllib.core.columns import Columns
 
 import args  # noqa: F401
 from mlp import Critic_MLP
+from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
 from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
@@ -273,6 +274,32 @@ class TestSetup(DisableBreakpointsForGUI, SetupDefaults):
             with mock.patch.object(sys, "argv", ["file.py", "--agent_type", actor]):
                 # fails as expects trial parameter
                 SympolSetup()
+
+    def test_dynamic_buffer_callback(self):
+        # Adding dynamic buffer
+        with mock.patch.object(sys, "argv", ["file.py", "--dynamic_buffer"]):
+            # fails as expects trial parameter
+            config = SympolSetup().config
+            assert (
+                config.callbacks_class is DynamicBufferUpdate
+                or (isinstance(config.callbacks_class, list) and DynamicBufferUpdate in config.callbacks_class)
+                or (
+                    getattr(config.callbacks_class, "IS_CALLBACK_CONTAINER", False)
+                    and DynamicBufferUpdate in config.callbacks_class._callback_list  # type: ignore[attr-defined]
+                )
+            )
+        # adding no buffer
+        with mock.patch.object(sys, "argv", ["file.py"]):
+            # fails as expects trial parameter
+            config = SympolSetup().config
+            assert (
+                config.callbacks_class is not DynamicBufferUpdate
+                and (not isinstance(config.callbacks_class, list) or DynamicBufferUpdate not in config.callbacks_class)
+                and (
+                    not getattr(config.callbacks_class, "IS_CALLBACK_CONTAINER", False)
+                    or DynamicBufferUpdate not in config.callbacks_class._callback_list  # type: ignore[attr-defined]
+                )
+            )
 
 
 if __name__ == "__main__":

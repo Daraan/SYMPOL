@@ -7,9 +7,9 @@ import jax
 from ray import tune
 
 import configs
-from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.config.create_algorithm import create_algorithm_config
 from ray_utilities.config.experiment_base import ExperimentSetupBase
+from ray_utilities.config.extensions import SetupWithDynamicBuffer
 from ray_utilities.default_trainable import create_default_trainable
 from rllib_port.core.connectors.env_to_module import make_env_to_module_without_numpy
 from rllib_port.core.connectors.module_to_env import make_jax_module_to_env_connector
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
+class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentParser]):
     PROJECT = "SYMPOL"
 
     @property
@@ -116,7 +116,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             )
 
     @classmethod
-    def config_from_args(cls, args):
+    def _config_from_args(cls, args):
         config, _spec = create_algorithm_config(
             args,
             env_type=args.env_type,
@@ -126,6 +126,7 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
         )
+        cls.add_callbacks_to_config(config, cls._get_callbacks_from_args(args))
         # NOTE: Incomplete automcompletion kwargs -> super()
         # Algorithm settings
         DEBUG_CONNECTORS = {"env_to_module": False, "module_to_env": False, "learner": False}
@@ -175,12 +176,6 @@ class SympolSetup(ExperimentSetupBase[SympolArgumentParser]):
                 train_batch_size_per_learner=args.train_batch_size_per_learner,
             )
             assert not config.learner_config_dict.get("legacy")
-        if isinstance(config.callbacks_class, list):
-            config.callbacks_class.append(DynamicBufferUpdate)
-        elif getattr(config.callbacks_class, "IS_CALLBACK_CONTAINER", False):
-            config.callbacks_class._callback_list.append(DynamicBufferUpdate)  # type: ignore[attr-defined]
-        else:
-            config.callbacks(callbacks_class=[config.callbacks_class, DynamicBufferUpdate])
         # logging
         logger.info(
             "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",

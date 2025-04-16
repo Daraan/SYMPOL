@@ -2,6 +2,7 @@ from .utils import *
 from .utils import _is_discreteT as _is_discreteT
 from .envs import *
 
-from ray_utilities.nice_logging import nicer_logging
+# Will import ray
+from ray_utilities.nice_logger import nice_logger
 
-_logger = nicer_logging(__name__, level="DEBUG")
+_logger = nice_logger(__name__, level="DEBUG")

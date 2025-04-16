@@ -3,7 +3,7 @@ import logging
 from ray.rllib.core.rl_module.rl_module import RLModuleConfig
 from ray.rllib.utils.deprecation import logger as __deprecation_logger
 
-from ray_utilities.nice_logging import nicer_logging
+from ray_utilities.nice_logger import nice_logger
 
 # This suppresses a deprecation warning from RLModuleConfig
 __old_level = __deprecation_logger.getEffectiveLevel()
@@ -12,4 +12,4 @@ RLModuleConfig()
 __deprecation_logger.setLevel(__old_level)
 del __deprecation_logger
 
-_logger = nicer_logging(__name__, level="DEBUG")
+_logger = nice_logger(__name__, level="DEBUG")

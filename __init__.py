@@ -1,3 +1,3 @@
-from ray_utilities.nice_logging import nicer_logging
+from ray_utilities.nice_logger import nice_logger
 
-logger = nicer_logging(__name__, level="DEBUG")
+logger = nice_logger(__name__, level="DEBUG")

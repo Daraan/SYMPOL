@@ -33,13 +33,12 @@ class AlgorithmTests(SetupDefaults):
             config.env_runners(num_envs_per_env_runner=1, episodes_to_numpy=False)
             if self._SETUP.args.legacy:
                 config.training(
-                    learner_config_dict={"legacy_minibatch_size": 8},
+                    learner_config_dict={"legacy_minibatch_size": 4},
                 )
                 config.training(
                     train_batch_size_per_learner=8, minibatch_size=8, shuffle_batch_per_epoch=False, num_epochs=2
                 )
             else:
-                raise NotImplementedError
                 config.training(
                     train_batch_size_per_learner=8, minibatch_size=4, shuffle_batch_per_epoch=False, num_epochs=2
                 )
