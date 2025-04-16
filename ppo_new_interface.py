@@ -20,7 +20,9 @@ import optuna
 # from torch.utils.tensorboard import SummaryWriter
 import wandb
 from rllib_port.mlp.state_action_dt import fit_stateActionDT
-from rllib_port.sympol.sympol_setup import SympolSetup
+from rllib_port.sympol_setup import SympolSetup
+from rllib_port.core.sympol_module import SympolPPOModule
+
 from utils import (
     ActorTrainState,
     EpisodeStatistics,
@@ -144,14 +146,6 @@ def train_agent(
                 monitor_gym=True,
                 save_code=True,
             )
-        env_seed = args.seed + (random_trial_number * 100)
-        if True:
-            seed_training = args.seed + (random_trial_number * 100)
-        else:
-            seed_training = args.seed
-        key = jax.random.PRNGKey(seed_training)
-
-        from rllib_port.sympol.sympol_module import SympolPPOModule
 
         module = SympolPPOModule(
             observation_space=envs.single_observation_space,
@@ -170,8 +164,6 @@ def train_agent(
 
         lr_scheduler = optax.contrib.reduce_on_plateau(patience=3, factor=0.5)
         lr_scheduler_state = lr_scheduler.init(actor_state.params)
-        # actor.apply = jax.jit(actor.apply)
-        # critic.apply = jax.jit(critic.apply)
 
         episode_stats = EpisodeStatistics(
             episode_returns=jnp.zeros(args.n_envs, dtype=jnp.float32),
@@ -181,10 +173,17 @@ def train_agent(
         )
 
         # endregion
-
         global_step = 0
-        next_obs, _ = envs.reset(seed=env_seed)
 
+        # Seeds
+        env_seed = args.seed + (random_trial_number * 100)
+        if True:
+            seed_training = args.seed + (random_trial_number * 100)
+        else:
+            seed_training = args.seed
+        key = jax.random.PRNGKey(seed_training)
+
+        next_obs, _ = envs.reset(seed=env_seed)
         next_done = np.zeros(args.n_envs).astype(bool)
 
         # hyperparameters = {key: value for key, value in vars(args).items()}
@@ -213,6 +212,7 @@ def train_agent(
                     global_step=global_step,
                     accumulate_gradients_every_initial=accumulate_gradients_every_initial,
                 )
+
                 if n_steps != n_steps_old:
                     # compute_gae  = create_compute_gae(n_steps)
                     # update_ppo = create_update_ppo(batch_size, minibatch_size, accumulate_gradients_every)
@@ -379,6 +379,7 @@ def train_agent(
                     wandb_log["charts/total_time_cleaned"] = total_time_cleaned
 
                 if global_step + batch_size >= args.total_steps:  # TEST EVAL
+                    print("-- Running test eval --")
                     test_seed = 123456
                     if is_stateActionDT(actor, args):  # args.actor == "stateActionDT"
                         decision_tree = fit_stateActionDT(
