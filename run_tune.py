@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 if __name__ == "__main__":
-    import sys
+    import os
 
     import ray
 
     # Call ray init to avoid jax os.fork RuntimeWarnings
     # see: https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html#ray.init
-    ray.init(include_dashboard=len(sys.argv) > 1 and sys.argv[1] != "--test")
+    # ray debugger will not work if dashboard is not included
+    ray.init(include_dashboard=os.environ.get("RAY_DEBUG", "1") == "1")
 
 # Import comet (via ray_utilities) before other libraries (torch, tf, ...) to allow monkey patching.
 from ray_utilities import run_tune  # fmt: skip

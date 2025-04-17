@@ -143,8 +143,8 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             ),
             # TODO: Should set this in the defaults of the submodule
             num_envs_per_env_runner=3,  # env_context.vector_index
-            num_env_runners=4,  # env_context.worker_index
-            num_cpus_per_env_runner=2,
+            num_env_runners=4 if args.parallel else 1,  # env_context.worker_index
+            num_cpus_per_env_runner=2 if args.parallel else 1,
         )
         # training settings
         cast("AlgorithmConfig", config).training(
