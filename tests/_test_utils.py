@@ -24,7 +24,7 @@ from utils.utils import ActorTrainState, TrainState
 if TYPE_CHECKING:
     import chex
 
-args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-e", "2", "-np"])
+args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-it", "2", "-np"])
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
 

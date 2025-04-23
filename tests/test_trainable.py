@@ -16,7 +16,7 @@ class TestTraining(SetupDefaults):
         super().setUp()
         with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
             self._SETUP = SympolSetup(init_param_space=False)
-            self._SETUP.args.episodes = 20
+            self._SETUP.args.iterations = 20
             self._SETUP.args.render_each_eval = False
             self._SETUP.args.test = True
             self._SETUP.args.comet = False

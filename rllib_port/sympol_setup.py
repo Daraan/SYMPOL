@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any, Callable, cast
+from typing_extensions import deprecated
 
 import jax
 from ray import tune
@@ -58,6 +59,7 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
     N_STEPS_DEFAULT = 512
 
     @staticmethod
+    @deprecated("legacy")
     def get_minibatch_size(args):
         # if trial sample this
         if False and trial:
@@ -75,22 +77,6 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
         while batch_size // minibatch_size < 2:
             minibatch_size = minibatch_size // 2
         return minibatch_size
-
-    @staticmethod
-    def get_initial_batch_size(args):
-        if False and trial:
-            ...
-        elif not args.use_best_config:
-            n_steps = SympolSetup.N_STEPS_DEFAULT
-            n_envs = args.n_envs
-        else:
-            n_steps = args.n_steps
-            n_envs = args.n_envs
-        if args.dynamic_buffer:
-            n_steps = max(16, n_steps // 8)
-
-        batch_size = int(n_envs * n_steps)
-        return batch_size
 
     @classmethod
     def apply_legacy_settings(cls, config: AlgorithmConfig | PPOConfig, args: SympolArgumentParser | Any) -> None:

@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Literal
+from typing import TYPE_CHECKING, Any, Dict, Literal
 
 from typing_extensions import Self
 
 from args import ArgumentParserWithDefaults
 from config_types.args_types import CLIArgs
 from ray_utilities.config.typed_argument_parser import DefaultArgumentParser
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +25,6 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
     """Sync with args.actor"""
 
-    train_batch_size_per_learner: int = 4096  # batch size that ray samples
-
     seed: int = 42  # pyright: ignore[reportIncompatibleVariableOverride]
     """
     Seed for the environment
@@ -33,18 +36,14 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     legacy: bool = False
     """Use original SYMPOL implementation for PPO and batching"""
 
-    def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
+    total_steps: int | Literal["auto"] = "auto"  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
         return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
         super().configure()
-        self.add_argument(
-            "--batch_size",
-            dest="train_batch_size_per_learner",
-            type=int,
-            required=False,
-        )
 
         self.add_argument(
             "--no-adamW",
@@ -80,6 +79,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         return super().__setstate__(d)
 
     def process_args(self) -> None:
+        super().process_args()
         if self.adamW is True:
             logger.error("AdamW is already True")
         if self.seed is None and type(self).seed is not None:
@@ -97,7 +97,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
 
     def _process_args_ray_utilities(self) -> None:
         """Make CLIArgs compatible with DefaultArgumentParser"""
-        # self.episodes = int(self.total_steps / self.n_envs / self.minibatch_size)
+        # self.iterations = int(self.total_steps / self.n_envs / self.minibatch_size)
         self.env_type = self.env_id
         self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
         self.render_mode = "rgb_array" if self.render_env else None
@@ -152,3 +152,9 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
 
         if no_update:
             logger.debug(" --- No update of args ---")
+
+    def __post_init__(self: DataclassInstance):
+        # fix dataclass default values
+        super().__post_init__()
+        # Dataclass default comes from CLIArgs
+        self.__dataclass_fields__["total_steps"].default = SympolArgumentParser.total_steps

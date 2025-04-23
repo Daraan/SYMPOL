@@ -95,9 +95,13 @@ class TestArgContents(unittest.TestCase):
         self.assertTrue(args.reduce_lr)
         self.assertTrue(default_args.render_env)
         self.assertTrue(default_args.reduce_lr)
+        auto_keys = {"total_steps", "iterations"}
+        default_args_dict = _default_args_dict.copy()
+        for k in auto_keys:
+            default_args_dict.pop(k, None)
         self.assertDictEqual(
-            {k: v for k, v in args.as_dict().items() if k in _default_args_dict},
-            _default_args_dict,
+            {k: v for k, v in args.as_dict().items() if k in _default_args_dict and k not in auto_keys},
+            default_args_dict,
         )
         self.assertEqual(default_args.adamW, args.adamW)
 
@@ -206,14 +210,24 @@ class TestArgContents(unittest.TestCase):
             else:
                 self.assertEqual(getattr(args, k), getattr(parser, k), f"Default value for {k} is not set correctly.")
                 if "default" in settings:
-                    self.assertEqual(
-                        getattr(args, k), settings["default"], f"Default value for {k} is not set correctly."
-                    )
+                    if settings["default"] == "auto":
+                        # NOTE: in the future this could be changed if we want to keep "auto" after processing
+                        self.assertNotEqual(getattr(args, k), "auto", f"'auto' value for {k} is still 'auto'.")
+                    else:
+                        self.assertEqual(
+                            getattr(args, k), settings["default"], f"Default value for {k} is not set correctly."
+                        )
         for field in args.__dataclass_fields__.values():
             if field.default is not None and field.default != field.default_factory:
-                self.assertEqual(
-                    getattr(args, field.name), field.default, f"Default value for {field.name} is not set correctly."
-                )
+                if field.default == "auto":
+                    # NOTE: in the future this could be changed if we want to keep "auto" after processing
+                    self.assertNotEqual(
+                        getattr(args, field.name), "auto", f"'auto' value for {field.name} is still 'auto'."
+                    )
+                else:
+                    self.assertEqual(
+                        getattr(args, field.name), field.default, f"Default value for {field.name} not set correctly."
+                    )
             else:
                 self.assertIsNone(getattr(args, field.name), f"Default value for {field.name} should be None.")
 
