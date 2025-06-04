@@ -8,12 +8,13 @@ import jax
 from ray import tune
 
 import configs
+from ray_utilities.config import add_callbacks_to_config
 from ray_utilities.config.create_algorithm import create_algorithm_config
 from ray_utilities.config.experiment_base import ExperimentSetupBase
 from ray_utilities.config.extensions import SetupWithDynamicBuffer
 from ray_utilities.default_trainable import create_default_trainable
-from rllib_port.core.connectors.env_to_module import make_env_to_module_without_numpy
-from rllib_port.core.connectors.module_to_env import make_jax_module_to_env_connector
+from ray_utilities.connectors.jax.env_to_module import make_env_to_module_without_numpy
+from ray_utilities.connectors.jax.module_to_env import make_jax_module_to_env_connector
 from rllib_port.core.jax_learner import JaxPPOLearner
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.core.sympol_module import SympolPPOModule
@@ -112,7 +113,7 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
         )
-        cls.add_callbacks_to_config(config, cls._get_callbacks_from_args(args))
+        add_callbacks_to_config(config, cls._get_callbacks_from_args(args))
         # NOTE: Incomplete automcompletion kwargs -> super()
         # Algorithm settings
         DEBUG_CONNECTORS = {"env_to_module": False, "module_to_env": False, "learner": False}
@@ -128,24 +129,20 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
                 debug=DEBUG_CONNECTORS["module_to_env"],
             ),
             # TODO: Should set this in the defaults of the submodule
-            num_envs_per_env_runner=3,  # env_context.vector_index
+            num_envs_per_env_runner=4,  # env_context.vector_index
             num_env_runners=4 if args.parallel else 1,  # env_context.worker_index
             num_cpus_per_env_runner=2 if args.parallel else 1,
         )
         # training settings
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
-            # learner_connector=make_learner_connector_without_numpy(
-            #    config, debug=False
-            # ),  # ray has wrong annotation here
+            # NOTE: Ray has a wrong typing for learner_connector
             learner_class=JaxPPOLearner,
             # This is the size the learner receives per _update
             # Legacy minibatches are done in the learner
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
                 "accumulate_gradients_every": args.accumulate_gradients_every,
-                "dynamic_buffer": args.dynamic_buffer,
-                "dynamic_batch": not args.static_batch,
                 "legacy": args.legacy,
                 "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
             },

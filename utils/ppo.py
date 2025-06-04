@@ -34,6 +34,10 @@ def _compute_gae_once(
     gamma: chex.Numeric,
     gae_lambda: chex.Numeric,
 ) -> tuple[chex.Array, chex.Array]:
+    """
+    Args:
+        inp: dones[1:], values[1:], values[:-1], storage.rewards = inp
+    """
     advantages = carry
     nextdone, nextvalues, curvalues, reward = inp
     nextnonterminal = 1.0 - nextdone

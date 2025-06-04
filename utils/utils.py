@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import flax
 import flax.struct
-import gymnasium as gym
-import jax.numpy as jnp
 from flax.training.train_state import TrainState
-from gymnax.environments import environment as environment_gymnax
-from typing_extensions import Self, TypeAliasType, TypeVar
+from typing_extensions import Self, TypeVar
 
 from utils.envs import build_env, make_training_env
 from utils.trees import (
@@ -24,26 +21,26 @@ from utils.trees import (
 )
 
 if TYPE_CHECKING:
-    from gymnasium.envs.registration import EnvSpec as _EnvSpec
+    import jax.numpy as jnp
 
 __all__ = [
     "OBSERVATION_LABELS",
-    "ObservationActionBuffer",
     "ActorTrainState",
     "EpisodeStatistics",
+    "ObservationActionBuffer",
     "Storage",
     "TrainState",  # re export
     "build_env",
-    "make_training_env",
-    "convert_to_child_representation_soft",
     "convert_to_child_representation",
+    "convert_to_child_representation_soft",
     "convert_to_discrete_tree",
     "count_nodes",
+    "make_training_env",
     "plot_decision_tree",
+    "plot_decision_tree_soft",
     "plot_tree_from_representation",
     "plot_tree_from_representation_soft",
     "prune_and_merge_tree",
-    "plot_decision_tree_soft",
 ]
 
 _is_discreteT = TypeVar("_is_discreteT", bound=bool, default=bool)  # noqa: N816, PYI018
@@ -63,10 +60,6 @@ OBSERVATION_LABELS = {
 }
 
 
-EnvSpec = TypeAliasType("EnvSpec", "str | _EnvSpec")
-EnvType = TypeAliasType("EnvType", gym.Env | environment_gymnax.Environment | gym.vector.VectorEnv)
-
-
 class ActorTrainState(TrainState):
     grad_accum: jnp.ndarray
     indices: dict = flax.struct.field(pytree_node=False, hash=False)
@@ -78,8 +71,16 @@ def format_array(arr) -> str:
     return f"{arr[:2]}\n ...\n{arr[-2:]}" if arr.size > 4 else str(arr)
 
 
+if TYPE_CHECKING:
+
+    class _HasReplaceMixing:
+        def replace(self, *args, **kwargs) -> Self: ...
+else:
+    _HasReplaceMixing = object
+
+
 @flax.struct.dataclass(kw_only=True)
-class StorageNoValues:
+class StorageNoValues(_HasReplaceMixing):
     obs: jnp.ndarray
     actions: jnp.ndarray
     logprobs: jnp.ndarray
@@ -122,10 +123,6 @@ class StorageNoValues:
         except Exception as e:  # noqa: BLE001
             return f"Error in __repr__: {e!s}" + super().__repr__()
 
-    if TYPE_CHECKING:  # added by flax.struct.dataclass
-
-        def replace(self, *args, **kwargs) -> Self: ...
-
 
 @flax.struct.dataclass(kw_only=True)
 class Storage(StorageNoValues):
@@ -133,7 +130,7 @@ class Storage(StorageNoValues):
 
 
 @flax.struct.dataclass
-class EpisodeStatistics:
+class EpisodeStatistics(_HasReplaceMixing):
     episode_returns: jnp.ndarray
     episode_lengths: jnp.ndarray
     returned_episode_returns: jnp.ndarray
@@ -145,10 +142,6 @@ class EpisodeStatistics:
 
 
 @flax.struct.dataclass
-class ObservationActionBuffer:
+class ObservationActionBuffer(_HasReplaceMixing):
     obs: jnp.ndarray
     actions: jnp.ndarray
-
-    if TYPE_CHECKING:
-
-        def replace(self, *args, **kwargs) -> Self: ...

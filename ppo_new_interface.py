@@ -320,6 +320,7 @@ def train_agent(
                 std_score_interpretable = np.std(score_interpretable).item()
                 # use the negative avg score, since reduce on plataeu normally considers non-decreasing losses as a plataeu,
                 # but we have a plataeu when the score is not increasing anymore
+                # region reduce learning rate
                 if args.reduce_lr:
                     _, lr_scheduler_state = lr_scheduler.update(
                         updates=actor_state.params, state=lr_scheduler_state, value=avg_score
@@ -348,6 +349,7 @@ def train_agent(
                         actor_state.opt_state[1][0]["log_std"][0].hyperparams["learning_rate"] = (
                             args.learning_rate_actor_log_std * lr_scheduler_state.scale
                         )
+                # endregion reduce learning rate
 
                 end_time = time.time()
                 elapsed_time = end_time - start_time

@@ -72,7 +72,7 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
         curr_entropy_coeffs: float,
         curr_kl_coeffs: Optional[float],
     ) -> _return_signature:
-        if Columns.LOSS_MASK in batch:  # NOTE: when jitted needs to be constant
+        if Columns.LOSS_MASK in batch:  # NOTE: when jitted needs to be always/never present
             mask = batch[Columns.LOSS_MASK]
             num_valid = jnp.sum(mask)
 
@@ -113,6 +113,7 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
             value_fn_out = module.compute_values(
                 batch, parameters=critic_state_params, embeddings=fwd_out.get(Columns.EMBEDDINGS)
             )  # XXX jit compatible?
+            # Masked values have loss 0
             vf_loss = jnp.square(value_fn_out - batch[Postprocessing.VALUE_TARGETS])
             vf_loss_clipped = jnp.clip(vf_loss, 0, config.vf_clip_param)
             mean_vf_loss = possibly_masked_mean(vf_loss_clipped)

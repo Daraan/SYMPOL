@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, cast
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from ray.rllib.algorithms.ppo.ppo import (
     LEARNER_RESULTS_KL_KEY,
     LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY,
@@ -14,14 +13,11 @@ from ray.rllib.algorithms.ppo.ppo import (
 )
 from ray.rllib.algorithms.ppo.ppo_learner import PPOLearner as RayPPOLearner
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
-from ray.rllib.connectors.connector_v2 import ConnectorV2
 from ray.rllib.connectors.learner import GeneralAdvantageEstimation
-from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.learner.learner import ENTROPY_KEY, POLICY_LOSS_KEY, VF_LOSS_KEY, Learner
 from ray.rllib.core.learner.tf.tf_learner import TfLearner
 from ray.rllib.core.learner.torch.torch_learner import TorchLearner
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.policy.tf_mixins import (
     EntropyCoeffSchedule,
@@ -39,6 +35,8 @@ from ray.rllib.utils.typing import (
 )
 
 from config_types.args_types import CLIArgs
+from ray_utilities.connectors.debug_connector import DebugConnector
+from ray_utilities.connectors.dummy_connector import DummyNumpyToTensor
 from utils.ppo import compute_gae, update_ppo
 
 from ._jax_compute_loss_for_module import make_jax_compute_loss_function
@@ -80,61 +78,8 @@ logger = logging.getLogger(__name__)
 class _TfExample(EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, ValueNetworkMixin):
     pass
 
-
-class _NoTensorConverter(ConnectorV2):
-    """A dummy connector to be used instead of a NumpyToTensor connector when a connector is needed"""
-
-    def __call__(
-        self,
-        *,
-        rl_module: RLModule,  # noqa: ARG002
-        batch: dict[str, Any],
-        **kwargs,  # noqa: ARG002
-    ) -> Any:
-        return batch
-
-
-class _LimitedToNumpyConverter(ConnectorV2):
-    """
-    Converts Jax arrays to numpy to pass trough the SampleBatch converter
-
-    Experimental might slow down the training;
-    jax -> numpy -> jax
-
-    Used for GAE results
-    """
-
-    def __call__(
-        self,
-        *,
-        rl_module: RLModule | MultiRLModule,  # noqa: ARG002
-        batch: dict[str, Any],
-        **kwargs,  # noqa: ARG002
-    ) -> Any:
-        # Code from NumpyToTensor
-
-        is_single_agent = False
-        is_multi_rl_module = isinstance(rl_module, MultiRLModule)
-        # `data` already a ModuleID to batch mapping format.
-        if not (is_multi_rl_module and all(c in rl_module._rl_modules for c in batch)):  # pyright: ignore[reportAttributeAccessIssue]
-            is_single_agent = True
-            batch = {DEFAULT_MODULE_ID: batch}
-
-        for module_id, module_data in batch.copy().items():
-            infos = module_data.pop(Columns.INFOS, None)
-            for k in ("advantages",):
-                module_data[k] = np.asarray(module_data[k])
-            if infos is not None:
-                module_data[Columns.INFOS] = infos
-            # Early out with data under(!) `DEFAULT_MODULE_ID`, b/c we are in plain
-            # single-agent mode.
-            if is_single_agent:
-                return module_data
-            batch[module_id] = module_data
-
-        return batch
-        # batch[Columns.ADVANTAGES] = jax.device_get(batch[Columns.ADVANTAGES])
-        # batch["value_targets"] = jax.device_get(batch["value_targets"])
+    # batch[Columns.ADVANTAGES] = jax.device_get(batch[Columns.ADVANTAGES])
+    # batch["value_targets"] = jax.device_get(batch["value_targets"])
 
 
 class JaxLearner(Learner):
@@ -312,11 +257,22 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                         break
                 if idx >= 0:
                     con = cast("GeneralAdvantageEstimation", self._learner_connector.connectors[idx])
-                    con._numpy_to_tensor_connector = _NoTensorConverter()  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]
+                    # Add connector that does NOT modify the batch, does not convert to numpy
+                    con._numpy_to_tensor_connector = DummyNumpyToTensor(as_learner_connector=True)
                     # TODO: if using no converter need monkeypatch; maybe convert there
-                    # con._numpy_to_tensor_connector = _LimitedToNumpyConverter()  # pyright: ignore[reportPrivateUsage]
+                    # con._numpy_to_tensor_connector = LimitedToNumpyConverter()
             # not needed anymore; state passed to self.vf(obs, state=state)
             # self._learner_connector.append(RemoveStateFromBatch())
+        if self.config.learner_config_dict["_debug_connectors"]:
+            if not self._learner_connector:
+                self._learner_connector = self.config.build_learner_connector(
+                    input_observation_space=None,
+                    input_action_space=None,
+                    device=self._device,
+                )
+            else:
+                self._learner_connector.append(DebugConnector(name="Learner debug End"))
+            self._learner_connector.prepend(DebugConnector(name="Learner debug Start"))
         self._compute_loss_for_modules = {
             module_id: make_jax_compute_loss_function(
                 module,  # pyright: ignore[reportArgumentType]

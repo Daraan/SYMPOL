@@ -14,7 +14,7 @@ from utils.trees import (
 )
 
 if TYPE_CHECKING:
-    from utils.utils import EnvType
+    from ray_utilities.typing import EnvType
 
 _logger = logging.getLogger(__name__)
 
