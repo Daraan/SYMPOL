@@ -1,29 +1,29 @@
 from __future__ import annotations
+
 from functools import partial
+from typing import TYPE_CHECKING, Any, Literal
 
 import distrax
 import jax
 import jax.numpy as jnp
-from typing import TYPE_CHECKING, Any, Literal
-
-from ray_utilities.jax.jax_model import PureJaxModelProtocol
-
 
 if TYPE_CHECKING:
+    import chex
+    import numpy as np
     from flax.core import FrozenDict as FlaxFrozenDict
     from flax.typing import FrozenVariableDict
-    from sympol import SYMPOL_RL
+
+    from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
+    from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
-    from mlp import Actor_MLP, Critic_MLP, Actor_MLP_Continuous
-    import numpy as np
-    from utils.utils import ActorTrainState, Storage, TrainState
-    import chex
+    from sympol import SYMPOL_RL
+    from utils.utils import Storage, TrainState
 
     _Actor = PureJaxModelProtocol | Actor_MLP | Actor_MLP_Continuous | Actor_SDT | SYMPOL_RL
     _Critic = Critic_MLP | Critic_SDT
 
-    # Overwritting at typing level keeps signature complete
-    jax.jit = lambda func, *args, **kwargs: func
+    # Overwrite on typing level keeps signature complete
+    jax.jit = lambda func, *args, **kwargs: func  # noqa: ARG005
 
 
 @partial(jax.jit, static_argnames=("action_type", "actor", "critic", "actor_state_indices"))

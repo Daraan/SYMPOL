@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import logging
-from functools import partial
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, cast
 
 import jax
 import jax.numpy as jnp
 from ray.rllib.core.columns import Columns
 from ray.rllib.evaluation.postprocessing import Postprocessing
-from typing_extensions import TypeAliasType, TypedDict
+from typing_extensions import TypeAliasType
 
 from ray_utilities.jax.distributions.jax_distributions import RLlibToJaxDistribution
 from ray_utilities.jax.math import explained_variance
@@ -17,7 +16,7 @@ from utils.get_action_and_value import get_action_and_value2
 if TYPE_CHECKING:
     import chex
     from ray.rllib.algorithms.ppo import PPOConfig
-    from ray.rllib.core.rl_module import RLModule
+    from ray.rllib.models.distributions import Distribution as RllibDistribution
 
     from rllib_port.core.sympol_module import SympolPPOModule
 
@@ -30,11 +29,6 @@ if TYPE_CHECKING:
         )
 
 logger = logging.getLogger(__name__)
-
-
-class Batch(TypedDict, closed=False):
-    action_dist_inputs: jnp.ndarray
-    action_logp: jnp.ndarray
 
 
 _return_signature = tuple[
@@ -61,6 +55,8 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
     """
     if TYPE_CHECKING:
         jax.jit = lambda func, *args, **kwargs: func  # noqa: ARG005
+    action_dist_class_train: type[RLlibToJaxDistribution | RllibDistribution]
+    action_dist_class_exploration: type[RLlibToJaxDistribution | RllibDistribution]
     action_dist_class_train = module.get_train_action_dist_cls()
     action_dist_class_exploration = module.get_exploration_action_dist_cls()
 
@@ -90,12 +86,12 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
 
         # Only calculate kl loss if necessary (kl-coeff > 0.0).
         if config.use_kl_loss:
-            action_kl = prev_action_dist.kl(curr_action_dist)
+            action_kl = cast("jnp.ndarray", prev_action_dist.kl(curr_action_dist))
             mean_kl_loss = possibly_masked_mean(action_kl)
         else:
             mean_kl_loss = jnp.zeros((1,))  # device=logp_ratio.device # jax has no device :/
 
-        curr_entropy = curr_action_dist.entropy()
+        curr_entropy = cast("jnp.ndarray", curr_action_dist.entropy())
         mean_entropy = possibly_masked_mean(curr_entropy)
 
         surrogate_loss = jnp.minimum(
@@ -110,8 +106,11 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
 
         # Compute a value function loss.
         if config.use_critic:
-            value_fn_out = module.compute_values(
-                batch, parameters=critic_state_params, embeddings=fwd_out.get(Columns.EMBEDDINGS)
+            value_fn_out = cast(
+                "jnp.ndarray",
+                module.compute_values(
+                    batch, parameters=critic_state_params, embeddings=fwd_out.get(Columns.EMBEDDINGS)
+                ),
             )  # XXX jit compatible?
             # Masked values have loss 0
             vf_loss = jnp.square(value_fn_out - batch[Postprocessing.VALUE_TARGETS])

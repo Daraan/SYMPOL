@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
 
-os.environ["RAY_DEBUG"] = "0"
+os.environ["RAY_DEBUG"] = "legacy"
 
 
 @clean_args
@@ -153,7 +153,7 @@ class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
             npt.assert_array_almost_equal(critic_out, critic_out2, decimal=5)  # type: ignore
 
             # has a squeeze(-1) at the end, reverse:
-            critic_out = critic_out[..., None]  # NOTE: Output shape is not the same
+            critic_out = critic_out[..., None]  # NOTE: Output shape is not the same # pyright: ignore[reportIndexIssue]
 
             o_model, o_state = self._create_critic_mlp()
             o_critic_out = o_model.apply(o_state.params, self._DEFAULT_INPUT)

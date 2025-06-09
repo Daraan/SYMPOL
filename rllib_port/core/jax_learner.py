@@ -35,7 +35,7 @@ from ray.rllib.utils.typing import (
 )
 
 from config_types.args_types import CLIArgs
-from ray_utilities.connectors.debug_connector import DebugConnector
+from ray_utilities.connectors.debug_connector import add_debug_connectors
 from ray_utilities.connectors.dummy_connector import DummyNumpyToTensor
 from utils.ppo import compute_gae, update_ppo
 
@@ -59,8 +59,9 @@ if TYPE_CHECKING:
     )
 
     from mlp import Critic_MLP
+    from ray_utilities.jax.jax_module import JaxPPOStateDict
     from ray_utilities.typing.jax import type_grad_and_value
-    from rllib_port.core.sympol_module import JaxPPOStateDict, SympolPPOModule
+    from rllib_port.core.sympol_module import SympolPPOModule
     from sdt import Critic_SDT
     from utils.utils import ActorTrainState, TrainState
 
@@ -115,16 +116,17 @@ class JaxLearner(Learner):
         self._states[module_id] = module.get_state(inference_only=False)
 
         if False:
+            # commented out to avoid linter errors
             self.register_optimizer(
                 module_id=module_id,
-                optimizer=optimizer,
+                # optimizer=optimizer,
                 params=actor_params,
                 lr_or_lr_schedule=config.lr,
             )
-            module.states["actor"].tx = optimizer
+            # module.states["actor"].tx = optimizer
             self.register_optimizer(
                 module_id=module_id,
-                optimizer=optimizer,
+                # optimizer=optimizer,
                 params=critic_params,
                 lr_or_lr_schedule=config.lr,
             )
@@ -170,7 +172,8 @@ class JaxLearner(Learner):
 
     def get_parameters(self, module: SympolPPOModule | Any) -> tuple[Sequence[Param], Sequence[Param]]:
         logger.warning("JaxLearner.get_parameters called which is not fully implemented", stacklevel=2)
-        return list(module.states["actor"].params), list(module.states["critic"].params)
+        # module.states["actor"].params is a dict
+        return list(module.states["actor"].params.values()), list(module.states["critic"].params.values())
 
     def get_param_ref(self, param: Param) -> Hashable:
         # Reference to param: self._params[param_ref] = param
@@ -263,16 +266,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
                     # con._numpy_to_tensor_connector = LimitedToNumpyConverter()
             # not needed anymore; state passed to self.vf(obs, state=state)
             # self._learner_connector.append(RemoveStateFromBatch())
-        if self.config.learner_config_dict["_debug_connectors"]:
-            if not self._learner_connector:
-                self._learner_connector = self.config.build_learner_connector(
-                    input_observation_space=None,
-                    input_action_space=None,
-                    device=self._device,
-                )
-            else:
-                self._learner_connector.append(DebugConnector(name="Learner debug End"))
-            self._learner_connector.prepend(DebugConnector(name="Learner debug Start"))
+        add_debug_connectors(self)
         self._compute_loss_for_modules = {
             module_id: make_jax_compute_loss_function(
                 module,  # pyright: ignore[reportArgumentType]

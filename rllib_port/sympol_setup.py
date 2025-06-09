@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any, Callable, cast
-from typing_extensions import deprecated
 
 import jax
 from ray import tune
+from typing_extensions import deprecated
 
 import configs
 from ray_utilities.config import add_callbacks_to_config
 from ray_utilities.config.create_algorithm import create_algorithm_config
 from ray_utilities.config.experiment_base import ExperimentSetupBase
 from ray_utilities.config.extensions import SetupWithDynamicBuffer
-from ray_utilities.default_trainable import create_default_trainable
 from ray_utilities.connectors.jax.env_to_module import make_env_to_module_without_numpy
 from ray_utilities.connectors.jax.module_to_env import make_jax_module_to_env_connector
+from ray_utilities.default_trainable import create_default_trainable
+from ray_utilities.learners import mix_learners
+from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugConnectors
 from rllib_port.core.jax_learner import JaxPPOLearner
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.core.sympol_module import SympolPPOModule
@@ -23,10 +25,17 @@ from rllib_port.extended_args import SympolArgumentParser
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.algorithms.ppo.ppo import PPOConfig
+    from ray.rllib.core.learner import Learner
 
     from ray_utilities.typing import TrainableReturnData
 
 logger = logging.getLogger(__name__)
+
+REMOVE_MASKED_SAMPLES_FROM_LEARNER = True
+"""Ray inserts masked samples into the learner that do not contribute to the loss.
+When True adds the RemoveMaskedSamplesConnector to the learner pipeline.
+"""
+# TODO: This should be a config attribute and possibly moved to the ExperimentSetupBase
 
 
 class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentParser]):
@@ -62,10 +71,10 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
     @staticmethod
     @deprecated("legacy")
     def get_minibatch_size(args):
-        # if trial sample this
-        if False and trial:
-            ...
-        elif not args.use_best_config:
+        if False:
+            # if we have a trial sample this instead
+            return
+        if not args.use_best_config:
             n_steps = SympolSetup.N_STEPS_DEFAULT
             n_envs = args.n_envs  # HACK; modify postprocessing args
         else:
@@ -134,16 +143,24 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             num_cpus_per_env_runner=2 if args.parallel else 1,
         )
         # training settings
+        learner_mix: list[type[Learner]] = [JaxPPOLearner]
+        if REMOVE_MASKED_SAMPLES_FROM_LEARNER:
+            from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSamplesLearner
+
+            learner_mix.insert(0, RemoveMaskedSamplesLearner)
+        if DEBUG_CONNECTORS["learner"]:  # NOTE: Must always be the first in the mix
+            learner_mix.insert(0, LearnerWithDebugConnectors)
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
             # NOTE: Ray has a wrong typing for learner_connector
-            learner_class=JaxPPOLearner,
+            learner_class=mix_learners(learner_mix),
             # This is the size the learner receives per _update
             # Legacy minibatches are done in the learner
             learner_config_dict={
                 "rng_key": jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "learner"))),
                 "accumulate_gradients_every": args.accumulate_gradients_every,
                 "legacy": args.legacy,
+                "no_numpy_to_tensor_connector": True,  # Disables GeneralAdvantageEstimation._numpy_to_tensor_connector
                 "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
             },
         )
@@ -192,7 +209,8 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             suggested_params = configs.suggest_config_stateActionDT(trial, args.env_id)
         else:
             suggested_params = {}
-        return suggested_params
+        assert isinstance(suggested_params, dict)
+        return cast("dict", suggested_params)
 
 
 if TYPE_CHECKING:

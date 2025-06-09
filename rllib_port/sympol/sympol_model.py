@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from ray.rllib.utils.typing import TensorType
 
     from config_types.params_types import SYMPOLModelArgsDict, SympolParams
+    from ray_utilities.typing.model_return import Batch
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class SympolRLModel(JaxRLModel):
         def __config_type(self):  # noqa
             self.config: SympolParams
 
-        def __call__(self, *args, parameters: dict, indices: dict, **kwargs) -> TensorType:
+        def __call__(self, *args, parameters: Batch, indices: dict, **kwargs) -> jnp.ndarray:
             """Call the model."""
             return super().__call__(*args, parameters=parameters, indices=indices, **kwargs)
 

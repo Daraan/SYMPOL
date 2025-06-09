@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 # pyright: reportIncompatibleMethodOverride=warning
-
+# pyright: reportIncompatibleVariableOverride=warning
 import logging
-from typing import TYPE_CHECKING, Any, Optional, TypedDict, Union, cast
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union, cast
 
 import jax
+
+from ray_utilities.jax.jax_module import JaxPPOModule, JaxPPOStateDict
 
 try:
     from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
@@ -27,8 +29,8 @@ from utils.get_action_and_value import get_action_and_value
 if TYPE_CHECKING:
     import chex
     import gymnasium as gym
+    from flax.core import FrozenDict
     from numpy.typing import NDArray
-    from ray.rllib.utils.typing import TensorType
 
     from config_types.params_types import CLIArgsDict
     from ray_utilities.dummy_encoder import DummyActorCriticEncoder
@@ -42,17 +44,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class JaxPPOStateDict(TypedDict):
-    actor: ActorTrainState
-    critic: TrainState
-    module_key: int | chex.PRNGKey
-
-
-class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
+class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
     # torch code: which should be equivalent
-    pi: SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel[bool]
-    vf: CriticSDTModel | CriticMLPModel
-    encoder: DummyActorCriticEncoder
     config: object
     """Deprecated: use model_config instead of config"""
 
@@ -106,26 +99,9 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
                 if target_obj is not None:
                     delattr(self, target_name)
 
-    def setup(self) -> None:
-        super().setup()
-        actor = self.pi
-        critic = self.vf
-        module_key = jax.random.PRNGKey(self.model_config["seed"])
-        module_key, actor_key, critic_key = jax.random.split(module_key, 3)
-
-        assert self.observation_space is not None
-        sample = self.observation_space.sample()
-        actor_state = actor.init_state(actor_key, sample)
-        critic_state = critic.init_state(critic_key, sample)
-
-        self.states: JaxPPOStateDict
-        self.set_state(
-            {
-                "actor": actor_state,
-                "critic": critic_state,
-                "module_key": module_key,
-            }
-        )
+        self.pi: SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel[bool]
+        self.vf: CriticSDTModel | CriticMLPModel
+        self.encoder: DummyActorCriticEncoder
 
     def to(self, device: Optional[chex.Device] = None):
         # FIXME: Implement proper device handling
@@ -138,9 +114,9 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
 
     # region: forward methods
 
-    # Currently Same as DefaultPPOTorchRLModule
+    # Analog to DefaultPPOTorchRLModule
     def _forward(
-        self, batch: dict[str, Any], *, parameters: Optional[dict] = None, indices: Optional[dict] = None, **kwargs
+        self, batch: dict[str, Any], *, parameters: Optional[Mapping] = None, indices: Optional[dict] = None, **kwargs
     ) -> dict[str, Any]:
         """
         Default forward pass (used for inference and exploration).
@@ -180,9 +156,9 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         """
         output = {}
         encoder_outs = self.encoder(batch)
-        output[Columns.EMBEDDINGS] = encoder_outs[ENCODER_OUT][CRITIC]
+        output[Columns.EMBEDDINGS] = encoder_outs[ENCODER_OUT][CRITIC]  # pyright: ignore[reportTypedDictNotRequiredAccess]  # training
         if Columns.STATE_OUT in encoder_outs:
-            output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
+            output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]  # pyright: ignore[reportGeneralTypeIssues]  # key is present
         model_out = self.pi(
             encoder_outs[ENCODER_OUT][ACTOR],
             parameters=parameters,
@@ -196,85 +172,6 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         else:
             output[Columns.ACTION_DIST_INPUTS] = model_out
         return output
-
-    def _forward_inference(self, batch: dict[str, Any], *, parameters=None, indices=None, **kwargs) -> dict[str, Any]:
-        """Forward-pass used for action computation without exploration behavior.
-
-        Override this method only, if you need specific behavior for non-exploratory
-        action computation behavior. If you have only one generic behavior for all
-        phases of training and evaluation, override `self._forward()` instead.
-
-        By default, this calls the generic `self._forward()` method.
-        """
-        batch = jax.lax.stop_gradient(batch)
-        # TODO: should not use exploration; rather _forward which is not implemented
-        return self._forward(batch, parameters=parameters, indices=indices, **kwargs)
-
-    def compute_values(
-        self,
-        batch: dict[str, Any],
-        embeddings: Optional[Any] = None,
-        *,
-        parameters: Optional[
-            chex.Array
-        ] = None,  # XXX For GaeIn the Connector pipeline setting this to None; however it may not be omitted for gradient computation
-    ) -> TensorType:
-        """Computes the value estimates given `batch`.
-
-        Note:
-            To allow gradient computation, pass `parameters` via keyword argument,
-            otherwise set it to None
-
-        Args:
-            batch: The batch to compute value function estimates for.
-            embeddings: Optional embeddings already computed from the `batch` (by
-                another forward pass through the model's encoder (or other subcomponent
-                that computes an embedding). For example, the caller of thie method
-                should provide `embeddings` - if available - to avoid duplicate passes
-                through a shared encoder.
-
-        Returns:
-            A tensor of shape (B,) or (B, T) (in case the input `batch` has a
-            time dimension.
-
-            Attention:
-                That the last value dimension should already be squeezed out (not 1!).
-        """
-        if embeddings is None:
-            # Separate vf-encoder.
-            if hasattr(self.encoder, "critic_encoder"):
-                batch_ = batch
-                if self.is_stateful():
-                    # The recurrent encoders expect a `(state_in, h)`  key in the
-                    # input dict while the key returned is `(state_in, critic, h)`.
-                    batch_ = batch.copy()
-                    batch_[Columns.STATE_IN] = batch[Columns.STATE_IN][CRITIC]
-                embeddings = self.encoder.critic_encoder(batch_)[ENCODER_OUT]  # pyright: ignore[reportOptionalCall]
-            # Shared encoder.
-            else:
-                embeddings = self.encoder(batch)[ENCODER_OUT][CRITIC]
-
-        if False and parameters is None:
-            logger.debug(
-                "No parameters passed to compute_values, using current parameters; "
-                "this is ONLY fine when called in general_advantage_estimation.",
-                stack_info=False,
-                stacklevel=2,
-            )
-        # Value head. Should not be a list even in continuous case.
-        vf_out = self.vf(
-            embeddings,  # pyright: ignore[reportArgumentType]
-            parameters=parameters if parameters is not None else self.states[CRITIC].params,
-        )
-        vf_out = vf_out.squeeze(axis=-1)  # pyright: ignore[reportArgumentType]
-        # NEW: # TODO: rllib does not add this to batch here, why; do during learner update?
-        # During rollout we do not need a JAX array here; casting would also allow to get rid of SampleBatch monkeypatch
-        # during inference/rollout this used stop_gradient
-        # NOTE: Cannot use this when inside jit
-        # possibly use. https://github.com/jax-ml/jax/discussions/9241
-        # if not self.inference_only:  # probably only need this in legacy
-        #    batch[Columns.VF_PREDS] = np.asarray(vf_out)
-        return vf_out
 
     # endregion
 
@@ -301,7 +198,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         """Update the actor and critic states."""
         if actor:
             self.states[ACTOR] = actor
-        else:
+        if critic:
             self.states[CRITIC] = critic
 
     def get_action_and_value(
@@ -327,7 +224,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxModule, DefaultPPORLModule):
         )
         return storage, action, key
 
-    def parameters(self) -> tuple[jax.Array, jax.Array]:
+    def parameters(self) -> tuple[FrozenDict[str, jax.Array], FrozenDict[str, jax.Array]]:
         return self.states[ACTOR].params, self.states[CRITIC].params
 
 

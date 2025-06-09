@@ -1,6 +1,5 @@
-import distrax
+import chex
 import flax.linen as nn
-import jax
 import jax.numpy as jnp
 import numpy as np
 from flax.linen.initializers import constant, orthogonal
@@ -11,7 +10,7 @@ class Critic_MLP(nn.Module):
     neurons_per_layer: int = 256
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs):
+    def __call__(self, x: chex.Array, **kwargs):
         for layer in range(self.num_layers):
             x = nn.Dense(self.neurons_per_layer)(x)
             x = nn.relu(x)
