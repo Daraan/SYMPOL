@@ -198,11 +198,13 @@ def train_agent(
         avg_episodic_return_list = []
         total_time_cleaned = 0
 
+        if args.total_steps == "auto":
+            args.total_steps = 1_000_000
         while global_step < args.total_steps:
             # for iteration in range(1, n_iterations + 1):
             wandb_log = {}
             # ALGO Logic: Storage setup
-            # increase_index = global_step // (args.total_steps//len(increase_factor_list))
+            # increase_index = global_step // (args.total_steps // len(increase_factor_list))
             # region: update buffer and rollout size; create new rollout function
             rollout: RolloutCallableType
             if args.dynamic_buffer or not args.static_batch:

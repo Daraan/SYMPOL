@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from ray.rllib.connectors.env_to_module import EnvToModulePipeline
     from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 
-    from rllib_port.core.jax_learner import JaxPPOLearner
+    from ray_utilities.jax.ppo.jax_ppo_learner import JaxPPOLearner
 
 
 class AlgorithmTests(SetupDefaults):

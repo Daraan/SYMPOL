@@ -7,6 +7,7 @@ import flax.struct
 from flax.training.train_state import TrainState
 from typing_extensions import Self, TypeVar
 
+from ray_utilities.jax.utils import ExtendedTrainState
 from utils.envs import build_env, make_training_env
 from utils.trees import (
     convert_to_child_representation,
@@ -60,8 +61,7 @@ OBSERVATION_LABELS = {
 }
 
 
-class ActorTrainState(TrainState):
-    grad_accum: jnp.ndarray
+class ActorTrainState(ExtendedTrainState):
     indices: dict = flax.struct.field(pytree_node=False, hash=False)
     # TODO:
     # possibly use: core.FrozenDict[str, Any] = struct.field(pytree_node=True)

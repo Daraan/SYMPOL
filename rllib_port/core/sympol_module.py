@@ -6,22 +6,12 @@ import logging
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union, cast
 
 import jax
-
-from ray_utilities.jax.jax_module import JaxPPOModule, JaxPPOStateDict
-
-try:
-    from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
-except ModuleNotFoundError:
-    # Refactoring of ray
-    from ray.rllib.algorithms.ppo.ppo_rl_module import (
-        PPORLModule as DefaultPPORLModule,  # pyright: ignore[reportPrivateImportUsage]
-    )
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
 from ray_utilities.jax.distributions.get_distributions_mixin import GetJaxDistributionsMixin
-from ray_utilities.jax.jax_module import JaxModule
+from ray_utilities.jax.ppo.jax_ppo_module import JaxActorCriticStateDict, JaxPPOModule
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.mlp.mlp_model import CriticMLPModel
 from utils.get_action_and_value import get_action_and_value
@@ -39,9 +29,14 @@ if TYPE_CHECKING:
     from rllib_port.sympol.sympol_model import SympolRLModel
     from utils.utils import ActorTrainState, Storage, TrainState
 
+
 # for a Intermediate old API to new API Module
 
 logger = logging.getLogger(__name__)
+
+
+class SympolPPOStateDict(JaxActorCriticStateDict):
+    actor: ActorTrainState  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
@@ -65,6 +60,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         if catalog_class is None:
             catalog_class = SympolJaxPPOCatalog
         self.model_config: CLIArgsDict
+        self.states: SympolPPOStateDict  # pyright: ignore[reportIncompatibleVariableOverride]
         super().__init__(
             config=config,
             observation_space=observation_space,
@@ -180,7 +176,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         *args,  # noqa: ARG002
         inference_only: bool = False,
         **kwargs,  # noqa: ARG002
-    ) -> JaxPPOStateDict:
+    ) -> SympolPPOStateDict:
         state_dict = self.states
         # critic state not needed; possibly only bother when using GPU
         # however, if we copy the dict -> key updates are not performed -> repeated usage of keys!

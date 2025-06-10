@@ -125,7 +125,7 @@ profile = "black"
 
 [tool.pyright]
 extraPaths = ["ray_utilities/"]
-exclude = ["ppo_gymnax.py"]  # temp for performance
+exclude = ["**/ppo_gymnax.py", "**/ppo_new_interface.py", "./ppo.py", "**/node_modules", "**/__pycache__"]  # temp for performance
 extends = "ray_utilities/pyproject.toml"
 reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"

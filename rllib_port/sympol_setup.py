@@ -17,7 +17,7 @@ from ray_utilities.connectors.jax.module_to_env import make_jax_module_to_env_co
 from ray_utilities.default_trainable import create_default_trainable
 from ray_utilities.learners import mix_learners
 from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugConnectors
-from rllib_port.core.jax_learner import JaxPPOLearner
+from rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.extended_args import SympolArgumentParser
@@ -143,7 +143,7 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             num_cpus_per_env_runner=2 if args.parallel else 1,
         )
         # training settings
-        learner_mix: list[type[Learner]] = [JaxPPOLearner]
+        learner_mix: list[type[Learner]] = [JaxPPOLearnerWithLegacy]
         if REMOVE_MASKED_SAMPLES_FROM_LEARNER:
             from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSamplesLearner
 

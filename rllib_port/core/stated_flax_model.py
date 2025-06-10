@@ -53,6 +53,7 @@ class StatedActorFlaxRLModel(FlaxRLModel[ModelType, _ConfigType]):
                 optax.clip_by_global_norm(config["max_grad_norm"]),
                 optax.inject_hyperparams(optimizer_cls)(config["learning_rate_actor"]),
             ),
+            # TODO: can likely skip second init call
             grad_accum=jax.tree.map(jnp.zeros_like, self.model.init(actor_key, jnp.array([sample]))),
             indices=None,
         )
