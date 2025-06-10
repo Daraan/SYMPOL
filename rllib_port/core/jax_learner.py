@@ -89,12 +89,13 @@ class JaxLearner(Learner):
     def __init__(
         self,
         *,
-        config: "AlgorithmConfig | PPOConfig",
+        config: "PPOConfig",
         module_spec: Optional[RLModuleSpec | MultiRLModuleSpec] = None,
         module: Optional[RLModule] = None,
     ):
         # calls configure_optimziers_for_module
         super().__init__(config=config, module_spec=module_spec, module=module)
+        self.config: PPOConfig
         # Should use learner config
         # TODO
         # possible use config["accumulate_grad_batches"]
@@ -107,7 +108,11 @@ class JaxLearner(Learner):
     # def configure_optimizers(self) -> None:
     #    return super().configure_optimizers()
 
-    def configure_optimizers_for_module(self, module_id: ModuleID, config: "AlgorithmConfig") -> None:
+    def configure_optimizers_for_module(
+        self,
+        module_id: ModuleID,
+        config: Optional["AlgorithmConfig"] = None,  # noqa: ARG002
+    ) -> None:
         # MAYBE NOT NEEDED
         module: SympolPPOModule = self._module[module_id]  # type: ignore[assignment]
         # likely do not need these here
@@ -121,14 +126,14 @@ class JaxLearner(Learner):
                 module_id=module_id,
                 # optimizer=optimizer,
                 params=actor_params,
-                lr_or_lr_schedule=config.lr,
+                # lr_or_lr_schedule=config.lr,
             )
             # module.states["actor"].tx = optimizer
             self.register_optimizer(
                 module_id=module_id,
                 # optimizer=optimizer,
                 params=critic_params,
-                lr_or_lr_schedule=config.lr,
+                # lr_or_lr_schedule=config.lr,
             )
 
     # jittable
@@ -269,8 +274,8 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         add_debug_connectors(self)
         self._compute_loss_for_modules = {
             module_id: make_jax_compute_loss_function(
-                module,  # pyright: ignore[reportArgumentType]
-                self.config,  # pyright: ignore[reportArgumentType]
+                module,  # pyright: ignore[reportArgumentType]  # has to be JaxPPOModule
+                self.config,
             )
             for module_id, module in self.module.items()
         }
@@ -349,7 +354,7 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
             }
         return parameters
 
-    def compute_loss_for_module(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def compute_loss_for_module(  # pyright: ignore[reportIncompatibleMethodOverride]  # additional params
         self,
         *,
         critic_state_params: Optional[jax.Array],
@@ -357,11 +362,10 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         config: "AlgorithmConfig | PPOConfig",  # noqa: ARG002
         batch: SampleBatch | dict[str, Any],
         fwd_out: dict[str, TensorType],
-        curr_entropy_coeff: float,
-        curr_kl_coeff: Optional[float],
+        curr_entropy_coeff: float | chex.Numeric | TensorType,
+        curr_kl_coeff: Optional[float | chex.Numeric | TensorType],
     ) -> tuple[TensorType, dict[str, chex.Numeric]]:
         # jittable and grad wrt critic_state_params
-        # TODO: Why is there a Loss Mask?
         (
             total_loss,
             (
@@ -412,8 +416,8 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         parameters: dict[ModuleID, dict[Literal["actor", "critic"], jax.Array]],
         fwd_out: dict[str, Any],
         batch: dict[str, Any],
-        curr_entropy_coeffs: dict[ModuleID, float],
-        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+        curr_entropy_coeffs: dict[ModuleID, float | chex.Numeric | TensorType],
+        curr_kl_coeffs: Optional[dict[ModuleID, float | chex.Numeric | TensorType]] = None,
     ):
         loss_per_module = {}
         aux_data = {}
@@ -467,12 +471,12 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         self,
         parameters: dict[ModuleID, dict[Literal["actor", "critic"], jax.Array]],
         batch: dict[str, Any],
-        curr_entropy_coeffs: dict[ModuleID, float],
-        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+        curr_entropy_coeffs: dict[ModuleID, float | chex.Numeric | TensorType],
+        curr_kl_coeffs: Optional[dict[ModuleID, float | chex.Numeric | TensorType]] = None,
     ) -> tuple[chex.Numeric, tuple[Any, dict[ModuleID, chex.Numeric], dict[str, Any]]]:
         """
         Note:
-            do not use directly use _forward_with_grads
+            Do not use directly use wrapped version: `self._forward_with_grads`
         """
         fwd_out = self._forward_train_call(batch, parameters=parameters)
         loss_per_module, compute_loss_aux = self._jax_compute_losses(
@@ -485,32 +489,33 @@ class JaxPPOLearner(RayPPOLearner, JaxLearner):
         self,
         states: dict[ModuleID, JaxPPOStateDict],
         batch: dict[str, Any],
-        curr_entropy_coeffs: dict[ModuleID, float],
-        curr_kl_coeffs: Optional[dict[ModuleID, float]] = None,
+        curr_entropy_coeffs: dict[ModuleID, float | chex.Numeric | TensorType],
+        curr_kl_coeffs: Optional[dict[ModuleID, float | chex.Numeric | TensorType]] = None,
     ) -> tuple[dict[ModuleID, JaxPPOStateDict], tuple[Any, dict[ModuleID, chex.Numeric], dict[str, Any]]]:
         parameters = self._get_state_parameters(states)
         gradients: dict[ModuleID, dict[Literal["actor", "critic"], Any]]
         (_all_losses_combined, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)), (gradients,) = (
-            self._forward_with_grads(parameters, batch, curr_entropy_coeffs, curr_kl_coeffs)  # pyright: ignore[reportArgumentType]
+            self._forward_with_grads(parameters, batch, curr_entropy_coeffs, curr_kl_coeffs)
         )
         if 0:
             # consider if implementation is necessary
             self.postprocess_gradients_for_module
-            postprocessed_gradients: dict = self.postprocess_gradients(gradients)
+            postprocessed_gradients: dict = self.postprocess_gradients(gradients)  # type: ignore
         else:
             postprocessed_gradients = gradients
         new_states = self.apply_gradients(postprocessed_gradients, states=states)
         return new_states, (fwd_out, loss_per_module_do_not_use, compute_loss_aux)
 
-    def _generate_curr_coeffs(self):
-        curr_entropy_coeffs = {}
-        curr_kl_coeffs = {}
+    def _generate_curr_coeffs(
+        self,
+    ) -> tuple[dict[ModuleID, TensorType | chex.Numeric], dict[ModuleID, TensorType | chex.Numeric]]:
+        """Get the current entropy and kl coefficients for each module."""
+        curr_entropy_coeffs: dict[ModuleID, TensorType | chex.Numeric] = {}
+        curr_kl_coeffs: dict[ModuleID, TensorType | chex.Numeric] = {}
         for module_id in self.module.keys():
             curr_entropy_coeffs[module_id] = self.entropy_coeff_schedulers_per_module[module_id].get_current_value()
-            if self.config.get_config_for_module(module_id):  # TODO: This s
-                curr_kl_coeffs[module_id] = self.curr_kl_coeffs_per_module[module_id]
-            else:
-                curr_kl_coeffs[module_id] = 0.0
+            # Note: curr_kl is piped trough self._get_tensor_variable
+            curr_kl_coeffs[module_id] = self.curr_kl_coeffs_per_module[module_id]
         return curr_entropy_coeffs, curr_kl_coeffs
 
     def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:

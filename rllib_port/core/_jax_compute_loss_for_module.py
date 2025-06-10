@@ -1,32 +1,22 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
 
 import jax
 import jax.numpy as jnp
 from ray.rllib.core.columns import Columns
 from ray.rllib.evaluation.postprocessing import Postprocessing
-from typing_extensions import TypeAliasType
 
-from ray_utilities.jax.distributions.jax_distributions import RLlibToJaxDistribution
 from ray_utilities.jax.math import explained_variance
-from utils.get_action_and_value import get_action_and_value2
 
 if TYPE_CHECKING:
     import chex
     from ray.rllib.algorithms.ppo import PPOConfig
     from ray.rllib.models.distributions import Distribution as RllibDistribution
 
-    from rllib_port.core.sympol_module import SympolPPOModule
-
-    try:
-        from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
-    except ModuleNotFoundError:
-        # Refactoring of ray
-        from ray.rllib.algorithms.ppo.ppo_rl_module import (
-            PPORLModule as DefaultPPORLModule,  # pyright: ignore[reportPrivateImportUsage]
-        )
+    from ray_utilities.jax.distributions.jax_distributions import RLlibToJaxDistribution
+    from ray_utilities.jax.jax_module import JaxPPOModule
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +27,20 @@ _return_signature = tuple[
     "tuple[chex.Numeric, chex.Numeric, chex.Numeric, chex.Numeric, chex.Numeric, chex.Numeric]",
 ]
 
-ComputeLossFunction = TypeAliasType(
-    "ComputeLossFunction",
-    Callable[
-        [dict, dict, float, float, type[RLlibToJaxDistribution], type[RLlibToJaxDistribution]],
-        _return_signature,
-    ],
-)
+
+class ComputeLossFunction(Protocol):
+    def __call__(
+        self,
+        critic_state_params,
+        /,
+        batch: dict[str, "jax.Array"],
+        fwd_out: dict,
+        curr_entropy_coeffs: float | chex.Numeric | Any,  # Any trick to be compatible with TensorType
+        curr_kl_coeffs: Optional[float | chex.Numeric | Any],
+    ) -> _return_signature: ...
 
 
-def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
+def make_jax_compute_loss_function(module: JaxPPOModule, config: PPOConfig) -> ComputeLossFunction:
     """
     Note:
         All config an module attributes are treated as constant and should not be changed.
@@ -63,10 +57,10 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
     @jax.jit
     def jax_compute_loss_for_module(
         critic_state_params,
-        batch: dict,
+        batch: dict[str, jax.Array],
         fwd_out: dict,
-        curr_entropy_coeffs: float,
-        curr_kl_coeffs: Optional[float],
+        curr_entropy_coeffs: float | chex.Numeric,
+        curr_kl_coeffs: Optional[float | chex.Numeric] = None,
     ) -> _return_signature:
         if Columns.LOSS_MASK in batch:  # NOTE: when jitted needs to be always/never present
             mask = batch[Columns.LOSS_MASK]
@@ -82,7 +76,13 @@ def make_jax_compute_loss_function(module: SympolPPOModule, config: PPOConfig):
         # Rllib comment: We should ideally do this in the LearnerConnector
         prev_action_dist = action_dist_class_exploration.from_logits(batch[Columns.ACTION_DIST_INPUTS])
 
-        logp_ratio = jnp.exp(curr_action_dist.logp(batch[Columns.ACTIONS]) - batch[Columns.ACTION_LOGP])
+        logp_ratio = jnp.exp(
+            cast(
+                "jax.Array",
+                curr_action_dist.logp(batch[Columns.ACTIONS]),
+            )
+            - batch[Columns.ACTION_LOGP]
+        )
 
         # Only calculate kl loss if necessary (kl-coeff > 0.0).
         if config.use_kl_loss:
