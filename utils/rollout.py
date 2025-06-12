@@ -31,11 +31,14 @@ class UpdateNStepsArgs(Protocol):
     static_batch: bool
 
 
+# NOTE: This is a copy of the function in ray_utilities for ppo_new_interface to be standalone
+# However, this function does not assure that the return values are bounded in sensible ranges.
 def update_buffer_and_rollout_size(
     args: UpdateNStepsArgs,
     *,
     initial_steps: int,
     global_step: int,
+    num_increases: int = 8,
     accumulate_gradients_every_initial: int,
 ):
     """
@@ -44,17 +47,15 @@ def update_buffer_and_rollout_size(
     Afterwards create Rollout with `n_steps`
     `if args.dynamic_buffer or not args.static_batch:` recalculate
     Then if n_steps != n_steps_old: -> create rollout
-
-    If `args.dynamic_buffer` is True, the buffer size `n_steps` is increased.
-    Otherwise `n_steps == initial_steps`.
-    Otherwise only `batch_size` and `accumulate_gradients_every` are increased.
     """
     # increase_index = global_step // (args.total_steps//sum(increase_factor_list))
+    if global_step + 1 > args.total_steps:
+        global_step = args.total_steps  # prevent explosion; limit factor to 128
     increase_factor = int(
-        2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
+        2 ** (np.ceil((((global_step + 1) * num_increases) / (1 + args.total_steps))) - 1)
     )  # int(increase_factor_list_long[increase_index])
     increase_factor_batch = int(
-        2 ** (np.ceil((((global_step + 1) * 8) / (1 + args.total_steps))) - 1)
+        2 ** (np.ceil((((global_step + 1) * num_increases) / (1 + args.total_steps))) - 1)
     )  # int(increase_factor_list_long[increase_index])
     if args.dynamic_buffer:
         n_steps = initial_steps * increase_factor
@@ -68,6 +69,8 @@ def update_buffer_and_rollout_size(
     batch_size = int(args.n_envs * n_steps)  # XXX: Get rid of n_envs; samples_per_step
     # n_iterations = args.total_steps // batch_size
     # eval_freq = max(args.eval_freq // batch_size, 1)
+    # logger.debug("updating buffer after step %d / %s to %s. Initial size: %s", global_step, args.total_steps, batch_size, initial_steps)
+
     return batch_size, accumulate_gradients_every, n_steps
 
 

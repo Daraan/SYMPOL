@@ -125,7 +125,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         encoder_outs = self.encoder(batch)
         # Stateful encoder?
         if Columns.STATE_OUT in encoder_outs:
-            output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
+            output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]  # pyright: ignore[reportGeneralTypeIssues]  # key is present
         # Pi head.
         model_out = self.pi(
             encoder_outs[ENCODER_OUT][ACTOR],
