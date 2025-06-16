@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import gymnasium as gym
     from numpy.typing import NDArray
 
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
@@ -28,17 +28,23 @@ class UpdateNStepsArgs(Protocol):
     total_steps: int
     n_envs: int
     dynamic_buffer: bool
-    static_batch: bool
+
+    @property
+    def static_batch(self) -> bool: ...
 
 
 # NOTE: This is a copy of the function in ray_utilities for ppo_new_interface to be standalone
 # However, this function does not assure that the return values are bounded in sensible ranges.
+# NOTE: SYMPOL keeps a copy of this function in the repo (standalone)
 def update_buffer_and_rollout_size(
-    args: UpdateNStepsArgs,
     *,
+    total_steps: int,
+    dynamic_buffer: bool,
+    dynamic_batch: bool,
+    n_envs: int = 1,
     initial_steps: int,
     global_step: int,
-    num_increases: int = 8,
+    num_increase_factors: int = 8,
     accumulate_gradients_every_initial: int,
 ):
     """
@@ -47,26 +53,31 @@ def update_buffer_and_rollout_size(
     Afterwards create Rollout with `n_steps`
     `if args.dynamic_buffer or not args.static_batch:` recalculate
     Then if n_steps != n_steps_old: -> create rollout
+
+    Attention:
+        The default value of num_increase_factors=8, does not match with the default values of
+        min_size=32 and max_size=8192 in the other functions of this module, as those result in
+        9 different values; use num_increase_factors=9 to match the other functions.
     """
     # increase_index = global_step // (args.total_steps//sum(increase_factor_list))
-    if global_step + 1 > args.total_steps:
-        global_step = args.total_steps  # prevent explosion; limit factor to 128
+    if global_step + 1 > total_steps:
+        global_step = total_steps  # prevent explosion; limit factor to 128
     increase_factor = int(
-        2 ** (np.ceil((((global_step + 1) * num_increases) / (1 + args.total_steps))) - 1)
+        2 ** (np.ceil((((global_step + 1) * num_increase_factors) / (1 + total_steps))) - 1)
     )  # int(increase_factor_list_long[increase_index])
     increase_factor_batch = int(
-        2 ** (np.ceil((((global_step + 1) * num_increases) / (1 + args.total_steps))) - 1)
+        2 ** (np.ceil((((global_step + 1) * num_increase_factors) / (1 + total_steps))) - 1)
     )  # int(increase_factor_list_long[increase_index])
-    if args.dynamic_buffer:
+    if dynamic_buffer:
         n_steps = initial_steps * increase_factor
     else:
         n_steps = initial_steps
-    if not args.static_batch:
+    if dynamic_batch:
         accumulate_gradients_every = int(accumulate_gradients_every_initial * increase_factor_batch)
     else:
         accumulate_gradients_every = int(accumulate_gradients_every_initial)
     # DYNAMIC_BATCH_SIZE
-    batch_size = int(args.n_envs * n_steps)  # XXX: Get rid of n_envs; samples_per_step
+    batch_size = int(n_envs * n_steps)  # XXX: Get rid of n_envs; samples_per_step
     # n_iterations = args.total_steps // batch_size
     # eval_freq = max(args.eval_freq // batch_size, 1)
     # logger.debug("updating buffer after step %d / %s to %s. Initial size: %s", global_step, args.total_steps, batch_size, initial_steps)
@@ -87,7 +98,7 @@ def create_rollout_function(
     n_steps: int,
     envs: gym.vector.VectorEnv,
     *,
-    args: CLIArgs,
+    args: SympolCLIArgs,
     actor: _Actor,
     critic: _Critic,
     action_indices: list[int],

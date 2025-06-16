@@ -15,7 +15,7 @@ import optax
 import tree
 from typing_extensions import NotRequired, Required, get_origin, get_type_hints
 
-from config_types.args_types import CLIArgs
+from config_types.args_types import SympolCLIArgs
 from mlp import Actor_MLP, Critic_MLP
 from sdt import Actor_SDT, Critic_SDT
 from sympol import SYMPOL_RL
@@ -27,6 +27,11 @@ if TYPE_CHECKING:
 args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-it", "2", "-np"])
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
+
+
+def patch_args(*args):
+    """Patch sys.argv with the given args."""
+    return mock.patch.object(sys, "argv", ["file.py", *args])
 
 
 def get_explicit_required_keys(cls):
@@ -53,8 +58,8 @@ class SetupDefaults(unittest.TestCase):
         self._OBSERVATION_SPACE = env.observation_space
         self._ACTION_SPACE = env.action_space
 
-        self._DEFAULT_CONFIG_DICT: Any = MappingProxyType(asdict(CLIArgs()))
-        self._DEFAULT_NAMESPACE = CLIArgs()
+        self._DEFAULT_CONFIG_DICT: Any = MappingProxyType(asdict(SympolCLIArgs()))
+        self._DEFAULT_NAMESPACE = SympolCLIArgs()
         self._INPUT_LENGTH = env.observation_space.shape[0]  # pyright: ignore[reportOptionalSubscript]
         self._DEFAULT_INPUT = jnp.arange(self._INPUT_LENGTH * 2).reshape((2, self._INPUT_LENGTH))
         self._DEFAULT_BATCH: dict[str, chex.Array] = MappingProxyType({"obs": self._DEFAULT_INPUT})  # pyright: ignore[reportAttributeAccessIssue]

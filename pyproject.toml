@@ -110,8 +110,8 @@ force-single-line = false  # default: false
 [tool.ruff.lint.pyflakes]
 # Avoid F401 error when Generic is not detected
 extend-generics = [
-    "ray_utilities.config.experiment_base.ExperimentSetupBase",
-    "ray_utilities.config.ExperimentSetupBase",
+    "ray_utilities.setup.experiment_base.ExperimentSetupBase",
+    "ray_utilities.setup.ExperimentSetupBase",
     "ray_utilities.jax.jax_model.FlaxRLModel",
     "rllib_port.core.stated_flax_model.StatedCriticFlaxRLModel",
     "rllib_port.core.stated_flax_model.StatedActorFlaxRLModel"
@@ -131,4 +131,3 @@ reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"
 reportUnnecessaryCast = "warning"
 reportPrivateImportUsage = "warning"
-analyzeUnannotatedFunctions = true

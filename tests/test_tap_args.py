@@ -1,17 +1,18 @@
+import sys
 import unittest
 import unittest.mock
 from dataclasses import asdict
 from typing import Any
 
 from args import get_args, get_args_old  # noqa: F401  # avoid circular imports
-from config_types.args_types import CLIArgs
+from config_types.args_types import SympolCLIArgs
 from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
 from rllib_port.extended_args import SympolArgumentParser
 from rllib_port.sympol_setup import SympolSetup
 from tests._original_args import get_original_args
-from tests._test_utils import args_train_no_tuner, clean_args, get_required_keys
+from tests._test_utils import args_train_no_tuner, clean_args, get_required_keys, patch_args
 
-_default_args = CLIArgs()
+_default_args = SympolCLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!
 _default_args_dict = vars(_default_args)
 _default_args_key_set = set(_default_args_dict.keys())
@@ -24,9 +25,9 @@ class TestArgObjects(unittest.TestCase):
 
     def test_equivalence_cli_args(self):
         self.maxDiff = 2000
-        self.assertEqual(hash(_default_args), hash(CLIArgs()))
+        self.assertEqual(hash(_default_args), hash(SympolCLIArgs()))
 
-        args_same = CLIArgs()
+        args_same = SympolCLIArgs()
         args_same_dict = asdict(args_same)
 
         with self.assertRaises(AssertionError):
@@ -39,7 +40,7 @@ class TestArgObjects(unittest.TestCase):
 
         # different hash
 
-        args_different = CLIArgs()
+        args_different = SympolCLIArgs()
         args_different.depth = 2
         args_different_dict = vars(args_different)
         self.assertNotEqual(args_different, _default_args)
@@ -47,7 +48,7 @@ class TestArgObjects(unittest.TestCase):
         self.assertNotEqual(args_different_dict, _default_args_dict)
 
         # difference in non-hashable attribute
-        args_different_but_same = CLIArgs()
+        args_different_but_same = SympolCLIArgs()
         args_different_but_same.random_trials = _default_args.random_trials + 342
         self.assertEqual(args_different_but_same, _default_args)
         self.assertEqual(hash(args_different_but_same), hash(_default_args))
@@ -86,8 +87,8 @@ class TestArgContents(unittest.TestCase):
         """
         parser = SympolArgumentParser()
         args = parser.parse_args()
-        # CLIArgs <= SympolArgumentParser
-        default_args = CLIArgs()
+        # SympolCLIArgs subset of SympolArgumentParser
+        default_args = SympolCLIArgs()
         # no - attributes
         self.assertFalse(default_args.adamW)
         self.assertFalse(args.adamW)
@@ -95,6 +96,12 @@ class TestArgContents(unittest.TestCase):
         self.assertTrue(args.reduce_lr)
         self.assertTrue(default_args.render_env)
         self.assertTrue(default_args.reduce_lr)
+        # Dynamic Batch
+        # NOTE: Sympol used dynamic batching by default. DefaultArgumentParser does NOT.
+        self.assertTrue(args.dynamic_batch)  # new Arg
+        self.assertFalse(args.static_batch)
+        self.assertEqual(args.dynamic_batch, not default_args.static_batch)
+
         auto_keys = {"total_steps", "iterations"}
         default_args_dict = _default_args_dict.copy()
         for k in auto_keys:
@@ -104,6 +111,24 @@ class TestArgContents(unittest.TestCase):
             default_args_dict,
         )
         self.assertEqual(default_args.adamW, args.adamW)
+
+    def test_equivalence_dynamic_batch(self):
+        default_args = SympolCLIArgs()
+
+        with clean_args:
+            args = SympolArgumentParser().parse_args()
+            self.assertTrue(args.dynamic_batch)
+            self.assertFalse(args.static_batch)  # for debugging, change code if fails
+        with patch_args("--static_batch"):
+            self.assertIn("--static_batch", sys.argv)
+            args = SympolArgumentParser().parse_args()
+            self.assertFalse(args.dynamic_batch)
+            self.assertFalse(args.static_batch)  # for debugging, change code if fails
+        with patch_args("--dynamic_batch"):
+            args = SympolArgumentParser().parse_args()
+            self.assertTrue(args.dynamic_batch)
+            self.assertEqual(args.dynamic_batch, not default_args.static_batch)
+            self.assertFalse(args.static_batch)  # for debugging, change code if fails
 
     # Test key presence
     def test_typed_dict_conformance(self):
@@ -159,9 +184,9 @@ class TestArgContents(unittest.TestCase):
 
     @clean_args
     def test_cli_args_completeness(self):
-        from config_types.args_types import Args, CLIArgs, GeneralArgs, PPOArgs, SYMPOLArgs
+        from config_types.args_types import Args, GeneralArgs, PPOArgs, SYMPOLArgs, SympolCLIArgs
 
-        dc = CLIArgs()
+        dc = SympolCLIArgs()
         old_args = get_original_args()
         attrs = (
             set(vars(dc).keys())
@@ -204,6 +229,10 @@ class TestArgContents(unittest.TestCase):
                 self.assertEqual(args.env_type, args.env_id)
             elif k == "agent_type":
                 self.assertEqual(args.agent_type, args.actor)
+            elif k == "static_batch":
+                # deprecated; check if dynamic_batch aligns
+                # args.static_batch is likely always False, as arg is redirected.
+                self.assertEqual(args.static_batch, not args.dynamic_batch)
             # Compare args:
             # Check if all default values are set
             # If a value does not match it could be a problem with the default value overwritten in configure()
@@ -215,7 +244,9 @@ class TestArgContents(unittest.TestCase):
                         self.assertNotEqual(getattr(args, k), "auto", f"'auto' value for {k} is still 'auto'.")
                     else:
                         self.assertEqual(
-                            getattr(args, k), settings["default"], f"Default value for {k} is not set correctly."
+                            getattr(args, k),
+                            settings["default"],
+                            f"Default value for '{k}' is not set correctly, should be '{settings['default']}'",
                         )
         for field in args.__dataclass_fields__.values():
             if field.default is not None and field.default != field.default_factory:

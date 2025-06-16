@@ -13,9 +13,9 @@ from ray.rllib.policy.tf_mixins import (
     ValueNetworkMixin,
 )
 
-from config_types.args_types import CLIArgs
+from config_types.args_types import SympolCLIArgs
 from ray_utilities.jax.ppo.jax_ppo_learner import JaxPPOLearner
-from utils.ppo import compute_gae, update_ppo
+from utils.ppo import update_ppo
 
 from ._sample_batch_to_storage import batch_to_storage
 
@@ -69,9 +69,9 @@ class JaxPPOLearnerWithLegacy(JaxPPOLearner):
             critic: Critic_SDT | Critic_MLP = module.vf.model
 
             # Need a NameSpace and not a dict
-            args: CLIArgs = CLIArgs(
+            args: SympolCLIArgs = SympolCLIArgs(
                 **{  # pyright: ignore[reportArgumentType]
-                    k: v for k, v in module.model_config.items() if k in CLIArgs.__annotations__
+                    k: v for k, v in module.model_config.items() if k in SympolCLIArgs.__annotations__
                 }
             )
             args.n_envs = 1

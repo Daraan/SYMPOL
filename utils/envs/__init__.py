@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from gymnasium.envs.registration import EnvSpec as _EnvSpec
     from numpy.typing import NDArray
 
-    from args import CLIArgs
+    from args import SympolCLIArgs
 
 __all__ = [
     "AutoResetWrapper",
@@ -70,7 +70,7 @@ def build_env(env_id: str | _EnvSpec, n_env, view_size=3) -> "gym.vector.VectorE
     return env_to_return
 
 
-def make_training_env(args: CLIArgs) -> tuple[gym.vector.VectorEnv, int, int, list[int]]:
+def make_training_env(args: SympolCLIArgs) -> tuple[gym.vector.VectorEnv, int, int, list[int]]:
     """
     Returns:
         envs: The vectorized environment

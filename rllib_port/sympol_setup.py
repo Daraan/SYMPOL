@@ -10,13 +10,13 @@ from typing_extensions import deprecated
 import configs
 from ray_utilities.config import add_callbacks_to_config
 from ray_utilities.config.create_algorithm import create_algorithm_config
-from ray_utilities.config.experiment_base import ExperimentSetupBase
-from ray_utilities.config.extensions import SetupWithDynamicBuffer
 from ray_utilities.connectors.jax.env_to_module import make_env_to_module_without_numpy
 from ray_utilities.connectors.jax.module_to_env import make_jax_module_to_env_connector
 from ray_utilities.default_trainable import create_default_trainable
 from ray_utilities.learners import mix_learners
 from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugConnectors
+from ray_utilities.setup.experiment_base import ExperimentSetupBase
+from ray_utilities.setup.extensions import SetupWithDynamicBuffer
 from rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.core.sympol_module import SympolPPOModule
@@ -30,12 +30,6 @@ if TYPE_CHECKING:
     from ray_utilities.typing import TrainableReturnData
 
 logger = logging.getLogger(__name__)
-
-REMOVE_MASKED_SAMPLES_FROM_LEARNER = True
-"""Ray inserts masked samples into the learner that do not contribute to the loss.
-When True adds the RemoveMaskedSamplesConnector to the learner pipeline.
-"""
-# TODO: This should be a config attribute and possibly moved to the ExperimentSetupBase
 
 
 class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentParser]):
@@ -62,9 +56,6 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
     def create_parser(self):
         self.parser = SympolArgumentParser()
         return self.parser
-
-    def _create_config(self):
-        return self.config_from_args(self.args)
 
     N_STEPS_DEFAULT = 512
 
@@ -122,9 +113,10 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
         )
-        add_callbacks_to_config(config, cls._get_callbacks_from_args(args))
+        add_callbacks_to_config(config, cls.get_callbacks_from_args(args))
         # NOTE: Incomplete automcompletion kwargs -> super()
         # Algorithm settings
+        # Wether to add DebugConnectors to the pipelines, modify file in place currently.
         DEBUG_CONNECTORS = {"env_to_module": False, "module_to_env": False, "learner": False}
         config.env_runners(
             # env -> module
@@ -144,7 +136,7 @@ class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentPars
         )
         # training settings
         learner_mix: list[type[Learner]] = [JaxPPOLearnerWithLegacy]
-        if REMOVE_MASKED_SAMPLES_FROM_LEARNER:
+        if not args.keep_masked_samples:
             from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSamplesLearner
 
             learner_mix.insert(0, RemoveMaskedSamplesLearner)

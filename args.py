@@ -5,7 +5,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from rllib_port.extended_args import SympolArgumentParser
 
 __all__ = ["get_args"]
@@ -41,8 +41,8 @@ def get_args() -> SympolArgumentParser:
     return get_args()
 
 
-def get_args_old() -> CLIArgs:
-    from config_types.args_types import CLIArgs
+def get_args_old() -> SympolCLIArgs:
+    from config_types.args_types import SympolCLIArgs
 
     parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
@@ -343,4 +343,4 @@ def get_args_old() -> CLIArgs:
                 break
     if args.overwrite_explicit:
         args.__dict__.update(explicit_arg_values)
-    return CLIArgs(**vars(args))
+    return SympolCLIArgs(**vars(args))

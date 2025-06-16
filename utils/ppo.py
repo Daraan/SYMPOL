@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import chex
     from numpy.typing import NDArray
 
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
@@ -55,7 +55,7 @@ def compute_gae(
     storage: Storage,
     *,
     critic: _Critic,
-    args: CLIArgs,
+    args: SympolCLIArgs,
 ):
     # Alternatively make compute_gae_once a static arg
     compute_gae_once = partial(_compute_gae_once, gamma=args.gamma, gae_lambda=args.gae_lambda)
@@ -90,7 +90,7 @@ def ppo_loss_base(
     actor: _Actor,
     critic: _Critic,
     actor_state_indices,
-    args: CLIArgs,
+    args: SympolCLIArgs,
 ):
     """
     Attention:
@@ -144,7 +144,7 @@ def update_ppo(
     *,
     minibatch_size: int,
     n_update_epochs: int,
-    args: CLIArgs,
+    args: SympolCLIArgs,
     actor: _Actor,
     critic: _Critic,
     actor_state_indices,

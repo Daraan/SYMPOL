@@ -17,10 +17,9 @@ from utils.trees.drawing import plot_decision_tree, plot_decision_tree_soft
 from utils.type_guard import is_d_sdt, is_sdt_actor, is_sympol_actor
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
     from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
     from sdt import Actor_SDT, Critic_SDT
@@ -38,7 +37,7 @@ def evaluate_agent(
     seed: int = 100,
     decision_tree: Optional[DecisionTreeClassifier | DecisionTreeRegressor | list[DecisionTreeRegressor]] = None,
     *,
-    args: CLIArgs,
+    args: SympolCLIArgs,
     action_dim: int,
     run_name: str,
     render_now: bool,

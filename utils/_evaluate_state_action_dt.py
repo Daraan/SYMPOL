@@ -20,7 +20,7 @@ from utils.utils import OBSERVATION_LABELS, ActorTrainState
 if TYPE_CHECKING:
     from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from sdt import Actor_SDT
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def evaluate_state_action_dt(
     decision_tree: Optional[DecisionTreeClassifier | DecisionTreeRegressor | list[DecisionTreeRegressor]] = None,
     *,
     video_folder: str = "videos/wandb",
-    args: CLIArgs,
+    args: SympolCLIArgs,
     action_dim: int,
     run_name: str,
     render_now: bool,
@@ -151,7 +151,7 @@ def evaluate_state_d_sdt(
     seed: int = 100,
     *,
     video_folder: str = "videos/wandb",
-    args: CLIArgs,
+    args: SympolCLIArgs,
     obs_dim: int,
     run_name: str,
     render_now: bool,

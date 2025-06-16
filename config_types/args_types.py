@@ -217,17 +217,17 @@ class SYMPOLArgs(SYMPOLModelArgs, PPOArgs, Args, GeneralArgs):
 
 
 @dataclass(kw_only=True, eq=True, unsafe_hash=True)
-class CLIArgs(SYMPOLArgs, MLPArgs, SDTArgs):
+class SympolCLIArgs(SYMPOLArgs, MLPArgs, SDTArgs):
     """Arguments for the command line interface"""
 
 
-def is_sympol_args(args: CLIArgs) -> TypeGuard[SYMPOLArgs]:
+def is_sympol_args(args: SympolCLIArgs) -> TypeGuard[SYMPOLArgs]:
     return args.actor == "sympol"
 
 
-def is_mlp_args(args: CLIArgs) -> TypeGuard[MLPArgs]:
+def is_mlp_args(args: SympolCLIArgs) -> TypeGuard[MLPArgs]:
     return args.actor == "mlp"
 
 
-def is_a_sdt_args(args: CLIArgs) -> TypeGuard[SDTArgs]:
+def is_a_sdt_args(args: SympolCLIArgs) -> TypeGuard[SDTArgs]:
     return args.actor in ("sdt", "d-sdt")

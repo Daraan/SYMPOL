@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     import jax
     import gymnasium as gym
     from mlp import Actor_MLP
-    from args import CLIArgs
+    from args import SympolCLIArgs
 
 
 def fit_stateActionDT(
@@ -28,7 +28,7 @@ def fit_stateActionDT(
     envs: gym.vector.VectorEnv,
     action_dim: int,  # todo might be inferable from envs, depends on custom envs
     n_steps: int,
-    args: CLIArgs,
+    args: SympolCLIArgs,
     actor: Actor_MLP | Actor_MLP_Continuous,
     storage: Storage,
     action_indices: list[int],

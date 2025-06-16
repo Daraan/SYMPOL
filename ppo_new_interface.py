@@ -130,8 +130,7 @@ def train_agent(
         group_name = run_name
         run_name = run_name + "_" + str(random_trial_number)
 
-        # region build env
-
+        # region build env; calls os.fork
         envs, obs_dim, action_dim, action_indices = make_training_env(args)
         # endregion
 
@@ -150,7 +149,7 @@ def train_agent(
         module = SympolPPOModule(
             observation_space=envs.single_observation_space,
             action_space=envs.single_action_space,
-            # FIXME: args should be CLIArgs to assure jax compatible hashing!
+            # FIXME: args should be SympolCLIArgs to assure jax compatible hashing!
             model_config=asdict(args),
         )
         module.setup()
@@ -207,9 +206,12 @@ def train_agent(
             # increase_index = global_step // (args.total_steps // len(increase_factor_list))
             # region: update buffer and rollout size; create new rollout function
             rollout: RolloutCallableType
-            if args.dynamic_buffer or not args.static_batch:
+            if args.dynamic_buffer or args.dynamic_batch:
                 batch_size, accumulate_gradients_every, n_steps = update_buffer_and_rollout_size(
-                    args,
+                    total_steps=args.total_steps,
+                    dynamic_buffer=args.dynamic_buffer,
+                    dynamic_batch=args.dynamic_batch if hasattr(args, "dynamic_batch") else not args.static_batch,
+                    n_envs=args.n_envs,
                     initial_steps=initial_steps,
                     global_step=global_step,
                     accumulate_gradients_every_initial=accumulate_gradients_every_initial,
@@ -247,9 +249,9 @@ def train_agent(
             actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step = rollout(  # pyright: ignore[reportPossiblyUnboundVariable]
                 actor_state, critic_state, episode_stats, next_obs, next_done, storage, key, global_step
             )
-            print("Storage intermediate", storage)
+            # print_values("after rollout")
             storage = compute_gae(critic_state, next_obs, next_done, storage, critic=critic, args=args)
-            print("Storage with gae", storage)
+            # print_values("with gae")
             actor_state, critic_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key = update_ppo(
                 actor_state,
                 critic_state,
@@ -263,7 +265,6 @@ def train_agent(
                 critic=critic,
                 actor_state_indices=actor_state.indices,
             )
-            print("storage final", storage)
 
             elapsed_time_cleaned = time.time() - start_time_cleaned
             total_time_cleaned += elapsed_time_cleaned
@@ -576,5 +577,5 @@ if __name__ == "__main__":
         # study.optimize(objective_fn, n_trials=args.n_trials, n_jobs=1)
 
     else:
-        # FIXME: args should be CLIArgs to assure jax compatible hashing!
+        # FIXME: args should be SympolCLIArgs to assure jax compatible hashing!
         train_agent(setup, trial=None, queue=None)

@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Literal
 
-from typing_extensions import Self
+from typing_extensions import Self, deprecated
 
 from args import ArgumentParserWithDefaults
-from config_types.args_types import CLIArgs
+from config_types.args_types import SympolCLIArgs
 from ray_utilities.config.typed_argument_parser import DefaultArgumentParser
 
 if TYPE_CHECKING:
@@ -20,7 +20,7 @@ def get_args():
     return SympolArgumentParser().parse_args()
 
 
-class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CLIArgs):
+class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, SympolCLIArgs):
     # Make Non-Required
     agent_type: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] = "sympol"
     """Sync with args.actor"""
@@ -36,7 +36,13 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
     legacy: bool = False
     """Use original SYMPOL implementation for PPO and batching"""
 
-    total_steps: int | Literal["auto"] = "auto"  # pyright: ignore[reportIncompatibleVariableOverride]
+    if TYPE_CHECKING:  # cannot overwrite attribute
+
+        @property
+        @deprecated("Use dynamic_batch instead")
+        def static_batch(self) -> Literal[False]:  # pyright: ignore
+            """The value of static_batch is not reliable, as it is forwarded to dynamic_batch"""
+            ...
 
     def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
@@ -69,6 +75,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
         )
         # Overwrite to to use new default
         self.add_argument("-s", "--seed", default=42, type=int)
+        # NOTE: DefaultArgumentParser uses dynamic_batch=False; but Sympol uses it by default
+        self.add_argument("--static_batch", action="store_false", dest="dynamic_batch", required=False, default=True)
 
         # no args from fields
 
@@ -147,7 +155,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, CL
             # update at least own and super args
             logger.info("--- Updating explicit args %s not in CLIArgs", explicit_arg_values)
             self.__dict__.update(
-                {k: v for k, v in explicit_arg_values.items() if k not in CLIArgs.__dataclass_fields__}
+                {k: v for k, v in explicit_arg_values.items() if k not in SympolCLIArgs.__dataclass_fields__}
             )
 
         if no_update:
