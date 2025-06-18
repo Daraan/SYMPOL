@@ -9,7 +9,7 @@ import jax
 from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.sympol.sympol_model import SympolRLModel
 from rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SetupDefaults, get_leafpath_value, patch_args
+from tests._test_utils import SympolSetupDefaults, get_leafpath_value, patch_args
 from utils.envs import build_env
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ray_utilities.jax.ppo.jax_ppo_learner import JaxPPOLearner
 
 
-class AlgorithmTests(SetupDefaults):
+class AlgorithmTests(SympolSetupDefaults):
     def setUp(self) -> None:
         SympolSetup.N_STEPS_DEFAULT = 3  # type: ignore
         super().setUp()
@@ -36,6 +36,8 @@ class AlgorithmTests(SetupDefaults):
                 config.training(
                     learner_config_dict={"legacy_minibatch_size": 4},
                 )
+                # NOTE: Setting train_batch_size_per_learner to 8, without argparser will log an error
+                # No evaluation interval for 8 steps in
                 config.training(
                     train_batch_size_per_learner=8, minibatch_size=8, shuffle_batch_per_epoch=False, num_epochs=2
                 )
@@ -183,12 +185,15 @@ class AlgorithmTests(SetupDefaults):
         # self.assertEqual(setup.args.accumulate_gradients_every, 2)
         # self.assertEqual(setup.config.learner_config_dict["accumulate_gradients_every"], 2)
         algo = setup.build_algo()
+        self.assertEqual(algo.config.minibatch_size, 128)
+        self.assertEqual(algo.config.num_epochs, 1)
+        self.assertEqual(algo.config.train_batch_size_per_learner, 128)
         env_runner = cast("SingleAgentEnvRunner", algo.env_runner_group.local_env_runner)  # type: ignore[attr-defined]
         runner_module: SympolPPOModule = env_runner.module  # pyright: ignore[reportAssignmentType]
         states_step0_no_copy = runner_module.states
         states_step0 = runner_module.states.copy()
 
-        for key in ("actor",):
+        for key in ("actor", "critic"):
             with self.subTest(f"Check initial state {key}"):
                 self.util_test_state_equivalence(
                     states_step0_no_copy[key],

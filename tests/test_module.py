@@ -21,7 +21,7 @@ from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
 from rllib_port.sympol.sympol_model import SympolRLModel
 from rllib_port.sympol_setup import SympolSetup
 from sympol import SYMPOL_RL
-from tests._test_utils import DisableBreakpointsForGUI, SetupDefaults, clean_args
+from tests._test_utils import DisableBreakpointsForGUI, SympolSetupDefaults, clean_args
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -33,7 +33,7 @@ os.environ["RAY_DEBUG"] = "legacy"
 
 
 @clean_args
-class TestModels(DisableBreakpointsForGUI, SetupDefaults):
+class TestModels(DisableBreakpointsForGUI, SympolSetupDefaults):
     def test_sympol_creation(self):
         model = SympolRLModel(obs_dim=2, action_dim=self._ACTION_DIM, config=self._DEFAULT_CONFIG_DICT)  # pyright: ignore[reportArgumentType]
         model.init_state(self._ACTOR_KEY, jax.numpy.zeros((2, 2)))
@@ -113,7 +113,7 @@ class TestModels(DisableBreakpointsForGUI, SetupDefaults):
         npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
 
-class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
+class TestSympolModule(DisableBreakpointsForGUI, SympolSetupDefaults):
     def test_module_setup(self):
         # Test
         module = SympolPPOModule(
@@ -268,7 +268,7 @@ class TestSympolModule(DisableBreakpointsForGUI, SetupDefaults):
             self.assertNotEqual(hash(indicesC), hash(indicesB))
 
 
-class TestSetup(DisableBreakpointsForGUI, SetupDefaults):
+class TestSetup(DisableBreakpointsForGUI, SympolSetupDefaults):
     def test_setup_instantiation(self):
         for actor in ["sympol", "sdt", "mlp"]:
             with mock.patch.object(sys, "argv", ["file.py", "--agent_type", actor]):

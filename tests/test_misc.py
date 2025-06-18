@@ -2,10 +2,10 @@ import jax.numpy as jnp
 import numpy.testing as npt
 
 from ray_utilities.connectors.dummy_connector import DummyNumpyToTensor
-from tests._test_utils import SetupDefaults
+from tests._test_utils import SympolSetupDefaults
 
 
-class TestSetupDefaults(SetupDefaults):
+class TestSetupDefaults(SympolSetupDefaults):
     def test_setup(self):
         # asser not writatable
         with self.assertRaises(TypeError):

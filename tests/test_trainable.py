@@ -4,14 +4,14 @@ from unittest import mock
 
 from rllib_port.core.sympol_module import SympolPPOModule
 from rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SetupDefaults, args_train_no_tuner
+from tests._test_utils import SympolSetupDefaults, args_train_no_tuner
 from utils.envs import build_env
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.ppo import PPOConfig
 
 
-class TestTraining(SetupDefaults):
+class TestTraining(SympolSetupDefaults):
     def setUp(self) -> None:
         super().setUp()
         with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):

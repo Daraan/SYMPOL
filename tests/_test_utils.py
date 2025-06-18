@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 import sys
-import unittest
 from dataclasses import asdict
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Collection
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
-import numpy.testing as npt
 import optax
-import tree
-from typing_extensions import NotRequired, Required, get_origin, get_type_hints
 
 from config_types.args_types import SympolCLIArgs
 from mlp import Actor_MLP, Critic_MLP
@@ -21,12 +17,31 @@ from sdt import Actor_SDT, Critic_SDT
 from sympol import SYMPOL_RL
 from utils.utils import ActorTrainState, TrainState
 
+from .test_ray_utilities.utils import (
+    DisableBreakpointsForGUI,
+    get_leafpath_value,
+    get_explicit_required_keys,
+    get_explicit_unrequired_keys,
+    get_required_keys,
+    get_optional_keys,
+)
+from .test_ray_utilities.utils import SetupDefaults as _SetupDefaults
+
 if TYPE_CHECKING:
     import chex
-    from jaxlib.xla_extension import pytree  # pyright: ignore[reportMissingModuleSource] pyi file
 
-    LeafType = pytree.SequenceKey | pytree.DictKey | pytree.GetAttrKey
-
+__all__ = [
+    "DisableBreakpointsForGUI",
+    "SympolSetupDefaults",
+    "args_train_no_tuner",
+    "clean_args",
+    "get_explicit_required_keys",
+    "get_explicit_unrequired_keys",
+    "get_leafpath_value",
+    "get_optional_keys",
+    "get_required_keys",
+    "patch_args",
+]
 
 args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-it", "2", "-np"])
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
@@ -38,31 +53,7 @@ def patch_args(*args):
     return mock.patch.object(sys, "argv", ["file.py", *args])
 
 
-def get_explicit_required_keys(cls):
-    return {k for k, v in get_type_hints(cls, include_extras=True).items() if get_origin(v) is Required}
-
-
-def get_explicit_unrequired_keys(cls):
-    return {k for k, v in get_type_hints(cls, include_extras=True).items() if get_origin(v) is NotRequired}
-
-
-def get_required_keys(cls):
-    return cls.__required_keys__ - get_explicit_unrequired_keys(cls)
-
-
-def get_optional_keys(cls):
-    return cls.__optional__keys - get_explicit_required_keys(cls)
-
-
-NOT_FOUND = object()
-
-
-def get_leafpath_value(leaf: LeafType):
-    """Returns the path value of a leaf, could be index (list), key (dict), or name (attribute)."""
-    return getattr(leaf, "name", getattr(leaf, "key", getattr(leaf, "idx", NOT_FOUND)))
-
-
-class SetupDefaults(unittest.TestCase):
+class SympolSetupDefaults(_SetupDefaults):
     def setUp(self):
         print("Remember to enable/disable justMyCode('\"debugpy.debugJustMyCode\": false,') in the settings")
         env = gym.make("CartPole-v1")
@@ -80,91 +71,6 @@ class SetupDefaults(unittest.TestCase):
         self._RANDOM_KEY, self._ACTOR_KEY, self._CRITIC_KEY = jax.random.split(model_key, 3)
         self._ACTION_DIM: int = self._ACTION_SPACE.n  # type: ignore[attr-defined]
         self._OBS_DIM: int = self._OBSERVATION_SPACE.shape[0]  # pyright: ignore[reportOptionalSubscript]
-
-    def util_test_tree_equivalence(
-        self,
-        tree1: TrainState | ActorTrainState | Any,
-        tree2: TrainState | ActorTrainState | Any,
-        ignore_leaves: Collection[str] = (),
-        msg: str = "",
-        attr_checked: str = "",
-    ):
-        leaves1 = jax.tree.leaves_with_path(tree1)
-        leaves2 = jax.tree.leaves_with_path(tree2)
-        # flat1 = tree.flatten(val1)
-        # flat_params2 = tree.flatten(val2)
-        tree.assert_same_structure(leaves1, leaves2)
-        path1: jax.tree_util.KeyPath
-        leaf: LeafType
-        for (path1, val1), (path2, val2) in zip(leaves1, leaves2):
-            self.assertEqual(path1, path2, msg)
-            if path1:  # empty tuple for top-level attributes
-                leaf = path1[-1]
-                leaf_name = get_leafpath_value(leaf)
-                if leaf_name in ignore_leaves:
-                    continue
-            npt.assert_array_equal(
-                val1, val2, err_msg=f"Attribute '{attr_checked}.{path1}' not equal in both states {msg}"
-            )
-
-    def util_test_state_equivalence(
-        self,
-        state1: TrainState | ActorTrainState | Any,
-        state2: TrainState | ActorTrainState | Any,
-        msg="",
-        *,
-        ignore: Collection[str] = (),
-        ignore_leaves: Collection[str] = (),
-    ):
-        """Check if two states are equivalent."""
-        # Check if the parameters and indices are equal
-        if isinstance(ignore, str):
-            ignore = {ignore}
-        else:
-            ignore = set(ignore)
-        if isinstance(ignore_leaves, str):
-            ignore_leaves = {ignore_leaves}
-        else:
-            ignore_leaves = set(ignore_leaves)
-
-        for attr in ["params", "indices", "grad_accum", "opt_state"]:
-            if attr in ignore:
-                continue
-            with self.subTest(msg=msg, attr=attr):
-                attr1 = getattr(state1, attr, None)
-                attr2 = getattr(state2, attr, None)
-                self.assertEqual(
-                    attr1 is not None, attr2 is not None, f"Attribute {attr} not found in both states {msg}"
-                )
-                if attr1 is None and attr2 is None:
-                    continue
-                self.util_test_tree_equivalence(attr1, attr2, ignore_leaves=ignore_leaves, msg=msg, attr_checked=attr)
-
-        # Check if the other attributes are equal
-        for attr in set(dir(state1) + dir(state2)) - ignore:
-            if not attr.startswith("_") and attr not in [
-                "params",
-                "indices",
-                "grad_accum",
-                "opt_state",
-                "apply_gradients",
-                "tx",
-                "replace",
-            ]:
-                attr1 = getattr(state1, attr, None)
-                attr2 = getattr(state2, attr, None)
-                self.assertEqual(
-                    attr1 is not None, attr2 is not None, f"Attribute '{attr}' not found in both states {msg}"
-                )
-                comp = attr1 == attr2
-                if isinstance(comp, bool):
-                    self.assertTrue(comp, f"Attribute '{attr}' not equal in both states: {attr1}\n!=\n{attr2}\n{msg}")
-                else:
-                    self.assertTrue(
-                        comp.all(), f"Attribute '{attr}' not equal in both states: {attr1}\n!=\n{attr2}\n{msg}"
-                    )
-
-        # NOTE: Apply gradients modifies state
 
     def _create_original_actor_state(self, model):
         return ActorTrainState.create(
@@ -362,13 +268,3 @@ class SetupDefaults(unittest.TestCase):
                     indices=actor.init_indices(actor_key) if args.actor == "sympol" else None,
                 )
         return actor, actor_state
-
-
-class DisableBreakpointsForGUI(unittest.TestCase):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        if {"-v", "test*.py"} & set(sys.argv):
-            print("disable breakpoint")
-            mock.patch("builtins.breakpoint").start()
-        else:
-            print("enable breakpoint")

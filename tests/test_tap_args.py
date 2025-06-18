@@ -7,6 +7,7 @@ from typing import Any
 from args import get_args, get_args_old  # noqa: F401  # avoid circular imports
 from config_types.args_types import SympolCLIArgs
 from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
+from ray_utilities.callbacks.algorithm.dynamic_batch_size import DynamicGradientAccumulation
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.callbacks.algorithm.exact_sampling_callback import exact_sampling_callback
 from ray_utilities.connectors.remove_masked_samples_connector import RemoveMaskedSamplesConnector
@@ -14,7 +15,7 @@ from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSam
 from rllib_port.extended_args import SympolArgumentParser
 from rllib_port.sympol_setup import SympolSetup
 from tests._original_args import get_original_args
-from tests._test_utils import SetupDefaults, args_train_no_tuner, clean_args, get_required_keys, patch_args
+from tests._test_utils import SympolSetupDefaults, args_train_no_tuner, clean_args, get_required_keys, patch_args
 
 _default_args = SympolCLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!
@@ -268,7 +269,7 @@ class TestArgContents(unittest.TestCase):
 
 
 @clean_args
-class TestExtensionsAdded(SetupDefaults):
+class TestExtensionsAdded(SympolSetupDefaults):
     def test_patch_args(self):
         with patch_args("--no_exact_sampling"):
             self.assertIn(
@@ -369,8 +370,39 @@ class TestExtensionsAdded(SetupDefaults):
             )
 
     def test_dynamic_batch(self):
-        ...
-        # In symbol by using gradient accumulation, cannot do this in ray.
+        setup = SympolSetup()
+        self.assertFalse(setup.args.dynamic_buffer)
+        self.assertFalse(
+            setup.config.callbacks_class is DynamicGradientAccumulation
+            or (
+                isinstance(setup.config.callbacks_class, type)
+                and issubclass(setup.config.callbacks_class, DynamicGradientAccumulation)
+            )
+            or (
+                isinstance(setup.config.callbacks_class, (list, tuple))
+                and DynamicGradientAccumulation in setup.config.callbacks_class
+            )
+        )
+
+        with patch_args("--dynamic_batch"):
+            setup = SympolSetup()
+            self.assertTrue(
+                setup.args.dynamic_batch,
+                "Expected dynamic_batch to be True when --dynamic_batch is set.",
+            )
+            self.assertTrue(
+                setup.config.callbacks_class is DynamicGradientAccumulation
+                or (
+                    isinstance(setup.config.callbacks_class, type)
+                    and issubclass(setup.config.callbacks_class, DynamicGradientAccumulation)
+                )
+                or (
+                    isinstance(setup.config.callbacks_class, (list, tuple))
+                    and DynamicGradientAccumulation in setup.config.callbacks_class
+                )
+            )
+        # In symbol by using gradient accumulation - here we can only modify minibatch size
+        # or decouple rollout and what is passed to the learner - however same attribute.
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from ray_utilities.default_trainable import create_default_trainable
 from ray_utilities.learners import mix_learners
 from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugConnectors
 from ray_utilities.setup.experiment_base import ExperimentSetupBase
-from ray_utilities.setup.extensions import SetupWithDynamicBuffer
+from ray_utilities.setup.extensions import SetupWithDynamicBatchSize, SetupWithDynamicBuffer
 from rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from rllib_port.core.sympol_module import SympolPPOModule
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolSetup(SetupWithDynamicBuffer, ExperimentSetupBase[SympolArgumentParser]):
+class SympolSetup(SetupWithDynamicBuffer, SetupWithDynamicBatchSize, ExperimentSetupBase[SympolArgumentParser]):
     PROJECT = "SYMPOL"
 
     @property
