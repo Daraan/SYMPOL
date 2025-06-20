@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, overload, TypeVar
 from typing_extensions import deprecated
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from config_types.args_types import SympolCLIArgs
     from rllib_port.extended_args import SympolArgumentParser
 
 __all__ = ["get_args"]
+
+_N = TypeVar("_N")
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -17,19 +20,39 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self._explicit_args = set()
 
-    def parse_known_args(self, args=None, namespace=None):
+    @overload
+    def parse_known_args(
+        self, args: Sequence[str] | None = None, namespace: None = None
+    ) -> tuple[argparse.Namespace, list[str]]: ...
+    @overload
+    def parse_known_args(self, args: Sequence[str] | None, namespace: _N) -> tuple[_N, list[str]]: ...
+    @overload
+    def parse_known_args(self, *, namespace: _N) -> tuple[_N, list[str]]: ...
+
+    def parse_known_args(
+        self, args: Sequence[str] | None = None, namespace: _N | None = None
+    ) -> tuple[_N | argparse.Namespace, list[str]]:
         if args is None:
             args = sys.argv[1:]
-        namespace, remaining_args = super().parse_known_args(args, namespace)
+        new_namespace, remaining_args = super().parse_known_args(args, namespace)
         self._explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
-        return namespace, remaining_args
+        if namespace is None:
+            return cast("argparse.Namespace", new_namespace), remaining_args
+        return cast("_N", new_namespace), remaining_args
 
-    def parse_args(self, args=None, namespace=None):
+    @overload
+    def parse_args(self, args: Sequence[str] | None = None, namespace: None = None) -> argparse.Namespace: ...
+    @overload
+    def parse_args(self, args: Sequence[str] | None, namespace: _N) -> _N: ...
+    @overload
+    def parse_args(self, *, namespace: _N) -> _N: ...
+
+    def parse_args(self, args=None, namespace: _N | None = None) -> argparse.Namespace | _N:
         namespace, remaining_args = self.parse_known_args(args, namespace)
         if remaining_args:
             msg = "unrecognized arguments: %s"
             self.error(msg % " ".join(remaining_args))
-        return namespace
+        return cast("argparse.Namespace", namespace)
 
     def get_explicit_args(self) -> set[str]:
         return self._explicit_args

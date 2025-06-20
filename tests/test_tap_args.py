@@ -268,6 +268,12 @@ class TestArgContents(unittest.TestCase):
                 # deprecated; check if dynamic_batch aligns
                 # args.static_batch is likely always False, as arg is redirected.
                 self.assertEqual(args.static_batch, not args.dynamic_batch)
+            elif k == "num_samples":
+                if "--num_samples" in sys.argv or "-n" in sys.argv:
+                    self.assertIsInstance(args.num_samples, int)
+                    continue
+                # If num_samples is not set, it is equal to num_jobs
+                self.assertEqual(args.num_samples, args.num_jobs)
             # Compare args:
             # Check if all default values are set
             # If a value does not match it could be a problem with the default value overwritten in configure()

@@ -51,6 +51,7 @@ class TestTraining(SympolSetupDefaults):
         with self.subTest("With parameters"):
             setup = SympolSetup(init_param_space=True)
             setup.config.evaluation(evaluation_interval=1)
+            setup.config.training(num_epochs=4, train_batch_size_per_learner=512, minibatch_size=64)
             trainable = setup.create_trainable()
             self.assertIsNotNone(setup.args.seed)
             params = setup.sample_params()
