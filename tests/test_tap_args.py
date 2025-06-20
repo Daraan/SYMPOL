@@ -103,9 +103,10 @@ class TestArgContents(unittest.TestCase):
         self.assertTrue(default_args.reduce_lr)
         # Dynamic Batch
         # NOTE: Sympol used dynamic batching by default. DefaultArgumentParser does NOT.
-        self.assertTrue(args.dynamic_batch)  # new Arg
-        self.assertFalse(args.static_batch)
-        self.assertEqual(args.dynamic_batch, not default_args.static_batch)
+        self.assertFalse(args.dynamic_batch)  # new Arg
+        # Deprecated:
+        # self.assertTrue(args.static_batch) # is NOT the invert
+        self.assertNotEqual(args.dynamic_batch, not default_args.static_batch)  # is NOW invert of default!
 
         auto_keys = {"total_steps", "iterations"}
         default_args_dict = _default_args_dict.copy()
@@ -122,9 +123,10 @@ class TestArgContents(unittest.TestCase):
 
         with clean_args:
             args = SympolArgumentParser().parse_args()
-            self.assertTrue(args.dynamic_batch)
+            self.assertFalse(args.dynamic_batch)
             self.assertFalse(args.static_batch)  # for debugging, change code if fails
         with patch_args("--static_batch"):
+            # NOTE: self.add_argument("--static_batch", action="store_false", dest="dynamic_batch"
             self.assertIn("--static_batch", sys.argv)
             args = SympolArgumentParser().parse_args()
             self.assertFalse(args.dynamic_batch)
@@ -159,10 +161,37 @@ class TestArgContents(unittest.TestCase):
 
     @args_train_no_tuner
     def test_get_args_wrapper(self):
-        self.assertEqual(get_args(), SympolArgumentParser().parse_args())
+        self.maxDiff = 2400
+        legacy_args = get_args()
+        new_args = SympolArgumentParser().parse_args()
+        self.assertFalse(new_args.dynamic_batch)
+        # new setup does not use dynamic_batch by default; invert flag
+        new_args.dynamic_batch = not new_args.dynamic_batch
+        self.assertDictEqual(legacy_args.as_dict(), new_args.as_dict())
+        self.assertFalse(legacy_args.static_batch)
+        self.assertTrue(legacy_args.dynamic_batch)
 
     @args_train_no_tuner
-    def test_new_parser(self):
+    def test_legacy_vs_new_dynamic_batch_args(self):
+        with patch_args("--static_batch"):
+            # now should be equal
+            legacy_args2 = get_args()
+            self.assertTrue(legacy_args2.static_batch)
+            self.assertFalse(legacy_args2.dynamic_batch)
+            new_args2 = SympolArgumentParser().parse_args()
+            self.assertFalse(new_args2.dynamic_batch)
+            # static_batch -> dynamic_batch False via `dest=dynamic_batch`
+
+        with patch_args("--dynamic_batch"):
+            # now should be equal
+            legacy_args3 = get_args()
+            self.assertFalse(legacy_args3.static_batch)
+            self.assertTrue(legacy_args3.dynamic_batch)
+            new_args3 = SympolArgumentParser().parse_args()
+            self.assertTrue(new_args3.dynamic_batch)
+
+    @args_train_no_tuner
+    def test_new_parser_for_legacy(self):
         new_args = get_args()
         self.assertLessEqual(_default_args_key_set, set(vars(new_args).keys()))
 
@@ -175,8 +204,8 @@ class TestArgContents(unittest.TestCase):
     @clean_args
     def test_args_original_vs_cli_args(self):
         # assure no extra args
-        new_args = get_args_old()
-        old_args = get_original_args()
+        new_args = get_args_old()  # original version; modified code
+        old_args = get_original_args()  # original version; unmodified code
 
         from tap import Tap
 
@@ -235,6 +264,7 @@ class TestArgContents(unittest.TestCase):
             elif k == "agent_type":
                 self.assertEqual(args.agent_type, args.actor)
             elif k == "static_batch":
+                continue
                 # deprecated; check if dynamic_batch aligns
                 # args.static_batch is likely always False, as arg is redirected.
                 self.assertEqual(args.static_batch, not args.dynamic_batch)
@@ -370,8 +400,9 @@ class TestExtensionsAdded(SympolSetupDefaults):
             )
 
     def test_dynamic_batch(self):
+        self.assertNotIn("--dynamic_batch", sys.argv, "Expected --dynamic_batch to not be in sys.argv by default.")
         setup = SympolSetup()
-        self.assertFalse(setup.args.dynamic_buffer)
+        self.assertFalse(setup.args.dynamic_batch)
         self.assertFalse(
             setup.config.callbacks_class is DynamicGradientAccumulation
             or (
@@ -381,7 +412,8 @@ class TestExtensionsAdded(SympolSetupDefaults):
             or (
                 isinstance(setup.config.callbacks_class, (list, tuple))
                 and DynamicGradientAccumulation in setup.config.callbacks_class
-            )
+            ),
+            msg="Expected no dynamic buffer when --dynamic_buffer is not set.",
         )
 
         with patch_args("--dynamic_batch"):
@@ -399,7 +431,8 @@ class TestExtensionsAdded(SympolSetupDefaults):
                 or (
                     isinstance(setup.config.callbacks_class, (list, tuple))
                     and DynamicGradientAccumulation in setup.config.callbacks_class
-                )
+                ),
+                msg="Expected dynamic buffer when --dynamic_buffer is set.",
             )
         # In symbol by using gradient accumulation - here we can only modify minibatch size
         # or decouple rollout and what is passed to the learner - however same attribute.

@@ -24,15 +24,6 @@ if TYPE_CHECKING:
     _Critic = Critic_MLP | Critic_SDT
 
 
-class UpdateNStepsArgs(Protocol):
-    total_steps: int
-    n_envs: int
-    dynamic_buffer: bool
-
-    @property
-    def static_batch(self) -> bool: ...
-
-
 # NOTE: This is a copy of the function in ray_utilities for ppo_new_interface to be standalone
 # However, this function does not assure that the return values are bounded in sensible ranges.
 # NOTE: SYMPOL keeps a copy of this function in the repo (standalone)

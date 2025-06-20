@@ -75,8 +75,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
         )
         # Overwrite to to use new default
         self.add_argument("-s", "--seed", default=42, type=int)
-        # NOTE: DefaultArgumentParser uses dynamic_batch=False; but Sympol uses it by default
-        self.add_argument("--static_batch", action="store_false", dest="dynamic_batch", required=False, default=True)
+        # NOTE: DefaultArgumentParser uses dynamic_batch=False
+        self.add_argument("--static_batch", action="store_false", dest="dynamic_batch", required=False, default=False)
 
         # no args from fields
 

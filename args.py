@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from typing import TYPE_CHECKING
+from typing_extensions import deprecated
 
 if TYPE_CHECKING:
     from config_types.args_types import SympolCLIArgs
@@ -35,10 +36,37 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
 
 
 def get_args() -> SympolArgumentParser:
-    # Circular import needs ArgumentParserWithDefaults to be defined first
-    from rllib_port.extended_args import get_args  # noqa: E402
+    """
+    Returns a legacy versin of the SympolArgumentParser with flipped dynamic_batch and static_batch.
 
-    return get_args()
+    Dynamic batches are used by default like in the original SYMPOL Paper
+    """
+    # Circular import needs ArgumentParserWithDefaults to be defined first
+    from rllib_port.extended_args import SympolArgumentParser  # noqa: E402
+
+    class LegacySympolArgumentParser(SympolArgumentParser):
+        if TYPE_CHECKING:
+
+            @property
+            @deprecated("When using the LegacySympolArgumentParser use static_batch instead")
+            def dynamic_batch(self) -> bool:  # pyright: ignore
+                """Legacy property to access dynamic_batch"""
+                return not self.static_batch
+        else:
+            dynamic_batch: bool = True
+        static_batch: bool = False  # pyright: ignore
+
+        def configure(self) -> None:
+            super().configure()
+            self.add_argument("--static_batch", required=False, default=False)
+
+    args = LegacySympolArgumentParser().parse_args()
+    # Do not rely on dynamic_batch
+    # dynamic_batch = args.dynamic_batch
+    # assert dynamic_batch is (not args.static_batch)
+    args.dynamic_batch = not args.static_batch  # type: ignore
+    # legacy patch for deprecated static_batch
+    return args
 
 
 def get_args_old() -> SympolCLIArgs:
