@@ -17,7 +17,7 @@ from sdt import Actor_SDT, Critic_SDT
 from sympol import SYMPOL_RL
 from utils.utils import ActorTrainState, TrainState
 
-from .test_ray_utilities.utils import (
+from tests.test_ray_utilities.utils import (
     DisableBreakpointsForGUI,
     get_leafpath_value,
     get_explicit_required_keys,
@@ -25,7 +25,7 @@ from .test_ray_utilities.utils import (
     get_required_keys,
     get_optional_keys,
 )
-from .test_ray_utilities.utils import SetupDefaults as _SetupDefaults
+from tests.test_ray_utilities.utils import SetupDefaults as _SetupDefaults
 
 if TYPE_CHECKING:
     import chex

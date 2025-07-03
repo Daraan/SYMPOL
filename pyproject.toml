@@ -131,3 +131,8 @@ reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"
 reportUnnecessaryCast = "warning"
 reportPrivateImportUsage = "warning"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".", "rllib_port", "args", "tests", "tests/test_ray_utilities"
+]

@@ -5,9 +5,9 @@ name: Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "rllib/port" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "rllib/port" ]
 
 permissions:
   contents: read
@@ -28,19 +28,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install \
           pytest \
-          distrax \
-          chex \
-          flax \
-          "minigrid<3" \
-          gymnax \
           graphviz \
-          "jax>0.5" \
           tensorflow-probability[tf]==0.23.0 \
-          ml_dtypes>=0.5.0 \
           tf_keras==2.15.1 \
-          git+https://github.com/Daraan/ray_utilities.git
+        # conflicting dependencies in md_dtypes do second install
+        pip install git+https://github.com/Daraan/ray_utilities.git "jax>0.5" "flax" "distrax" "chex" "gymnax" "minigrid<3" "ml_dtypes>=0.5.0"
     - name: Test with pytest
       # Disable checkpoint tests until Ray's issues with checkpoint loading is solved
       # ray_utilities are tested in submodule
       run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        echo "PYTHONPATH: $PYTHONPATH"
         pytest -k "not standalone and not checkpoint and not ray_utilities"
