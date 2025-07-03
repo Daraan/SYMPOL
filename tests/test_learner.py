@@ -1,12 +1,15 @@
+from typing import TYPE_CHECKING, cast
+
 import jax
+
+from ray_utilities.testing_utils import get_leafpath_value, patch_args
 from rllib_port.sympol_setup import SympolSetup
 from tests._test_utils import SympolSetupDefaults
-from tests.test_ray_utilities.utils import get_leafpath_value, patch_args
-from typing import cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rllib_port.core.sympol_module import SympolPPOModule
     from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
+
+    from rllib_port.core.sympol_module import SympolPPOModule
 
 
 class TestSympolLearner(SympolSetupDefaults):
