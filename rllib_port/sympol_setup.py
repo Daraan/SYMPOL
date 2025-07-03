@@ -32,7 +32,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolSetup(SetupWithDynamicBuffer, SetupWithDynamicBatchSize, ExperimentSetupBase[SympolArgumentParser]):
+class SympolSetup(
+    SetupWithDynamicBuffer[SympolArgumentParser],
+    SetupWithDynamicBatchSize[SympolArgumentParser],
+    ExperimentSetupBase[SympolArgumentParser],
+):
     PROJECT = "SYMPOL"
 
     @property

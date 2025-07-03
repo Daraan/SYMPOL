@@ -36,7 +36,7 @@ from utils.rollout import create_rollout_function, update_buffer_and_rollout_siz
 from utils.type_guard import is_stateActionDT
 
 if TYPE_CHECKING:
-    from config_types.args_types import CLIArgs
+    from config_types.args_types import SympolCLIArgs
     from rllib_port.extended_args import SympolArgumentParser
     from utils.rollout import RolloutCallableType
 

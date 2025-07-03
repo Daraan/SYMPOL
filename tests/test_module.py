@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
 
-os.environ["RAY_DEBUG"] = "legacy"
+# os.environ["RAY_DEBUG"] = "legacy"
 
 
 @clean_args

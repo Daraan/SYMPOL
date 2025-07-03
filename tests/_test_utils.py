@@ -55,6 +55,7 @@ def patch_args(*args):
 
 class SympolSetupDefaults(_SetupDefaults):
     def setUp(self):
+        super().setUp()
         print("Remember to enable/disable justMyCode('\"debugpy.debugJustMyCode\": false,') in the settings")
         env = gym.make("CartPole-v1")
 
