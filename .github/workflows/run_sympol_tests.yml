@@ -27,7 +27,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install \
-          pytest \
+          pytest pytest-timeout\
           graphviz \
           tensorflow-probability[tf]==0.23.0 \
           tf_keras==2.15.1 \
@@ -37,6 +37,5 @@ jobs:
       # Disable checkpoint tests until Ray's issues with checkpoint loading is solved
       # ray_utilities are tested in submodule
       run: |
-        export PYTHONPATH=$PYTHONPATH:$(pwd)
-        echo "PYTHONPATH: $PYTHONPATH"
-        pytest -k "not standalone and not checkpoint and not ray_utilities"
+        pytest -k "not standalone and not checkpoint and not ray_utilities and not test_learner"  --timeout=600
+        pytest -k "test_learner and not ray_utilities"  --timeout=600
