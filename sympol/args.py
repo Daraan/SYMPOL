@@ -1,32 +1,101 @@
+from __future__ import annotations
+
 import argparse
 import sys
+from typing import TYPE_CHECKING, cast, overload, TypeVar
+from typing_extensions import deprecated
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from sympol.config_types.args_types import SympolCLIArgs
+    from sympol.rllib_port.extended_args import SympolArgumentParser
+
+__all__ = ["get_args"]
+
+_N = TypeVar("_N")
 
 
-class OldArgumentParserWithDefaults(argparse.ArgumentParser):
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._explicit_args = set()
 
-    def parse_known_args(self, args=None, namespace=None):  # type: ignore
+    @overload
+    def parse_known_args(
+        self, args: Sequence[str] | None = None, namespace: None = None
+    ) -> tuple[argparse.Namespace, list[str]]: ...
+    @overload
+    def parse_known_args(self, args: Sequence[str] | None, namespace: _N) -> tuple[_N, list[str]]: ...
+    @overload
+    def parse_known_args(self, *, namespace: _N) -> tuple[_N, list[str]]: ...
+
+    def parse_known_args(
+        self, args: Sequence[str] | None = None, namespace: _N | None = None
+    ) -> tuple[_N | argparse.Namespace, list[str]]:
         if args is None:
             args = sys.argv[1:]
-        namespace, remaining_args = super().parse_known_args(args, namespace)
+        new_namespace, remaining_args = super().parse_known_args(args, namespace)
         self._explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
-        return namespace, remaining_args
+        if namespace is None:
+            return cast("argparse.Namespace", new_namespace), remaining_args
+        return cast("_N", new_namespace), remaining_args
 
-    def parse_args(self, args=None, namespace=None):  # type: ignore
+    @overload
+    def parse_args(self, args: Sequence[str] | None = None, namespace: None = None) -> argparse.Namespace: ...
+    @overload
+    def parse_args(self, args: Sequence[str] | None, namespace: _N) -> _N: ...
+    @overload
+    def parse_args(self, *, namespace: _N) -> _N: ...
+
+    def parse_args(self, args=None, namespace: _N | None = None) -> argparse.Namespace | _N:
         namespace, remaining_args = self.parse_known_args(args, namespace)
         if remaining_args:
             msg = "unrecognized arguments: %s"
             self.error(msg % " ".join(remaining_args))
-        return namespace
+        return cast("argparse.Namespace", namespace)
 
     def get_explicit_args(self) -> set[str]:
         return self._explicit_args
 
 
-def get_original_args():
-    parser = OldArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
+def get_args() -> SympolArgumentParser:
+    """
+    Returns a legacy versin of the SympolArgumentParser with flipped dynamic_batch and static_batch.
+
+    Dynamic batches are used by default like in the original SYMPOL Paper
+    """
+    # Circular import needs ArgumentParserWithDefaults to be defined first
+    from sympol.rllib_port.extended_args import SympolArgumentParser  # noqa: E402
+
+    class LegacySympolArgumentParser(SympolArgumentParser):
+        if TYPE_CHECKING:
+
+            @property
+            @deprecated("When using the LegacySympolArgumentParser use static_batch instead")
+            def dynamic_batch(self) -> bool:  # pyright: ignore
+                """Legacy property to access dynamic_batch"""
+                return not self.static_batch
+        else:
+            dynamic_batch: bool = True
+        static_batch: bool = False  # pyright: ignore
+
+        def configure(self) -> None:
+            super().configure()
+            self.add_argument("--static_batch", required=False, default=False)
+
+    args = LegacySympolArgumentParser().parse_args()
+    # Do not rely on dynamic_batch
+    # dynamic_batch = args.dynamic_batch
+    # assert dynamic_batch is (not args.static_batch)
+    args.dynamic_batch = not args.static_batch  # type: ignore
+    # legacy patch for deprecated static_batch
+    return args
+
+
+def get_args_old() -> SympolCLIArgs:
+    from sympol.config_types.args_types import SympolCLIArgs
+
+    parser = ArgumentParserWithDefaults(description="Hyperparameters for SYMPOL RL")
 
     parser.add_argument(
         "--use_best_config",
@@ -301,7 +370,7 @@ def get_original_args():
     explicit_arg_values = {arg: getattr(args, arg) for arg in explicit_args_corrected}
     args.__dict__.update(explicit_arg_values)
     if args.use_best_config:
-        from sympol import configs  # noqa
+        import sympol.configs as configs
 
         for name, value in vars(configs).items():
             if "minigrid" in name and name.split("_")[1] in args.env_id.lower():
@@ -325,5 +394,4 @@ def get_original_args():
                 break
     if args.overwrite_explicit:
         args.__dict__.update(explicit_arg_values)
-
-    return args
+    return SympolCLIArgs(**vars(args))

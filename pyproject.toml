@@ -16,6 +16,23 @@ exclude = '''
 )/
 '''
 
+[project]
+name = "sympol"
+version = "0.3.0"
+description = "SYMPOL package"
+authors = [
+  { name = "Your Name", email = "your.email@example.com" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/yourusername/sympol"
+
+[tool.setuptools]
+packages = ["sympol"]
+
 [tool.ruff]
 line-length = 120
 
@@ -96,6 +113,7 @@ exclude = [
   docstring-code-format = true
   exclude = [
     ".git",
+    "standalone",
   ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -125,7 +143,7 @@ profile = "black"
 
 [tool.pyright]
 extraPaths = ["ray_utilities/"]
-exclude = ["**/ppo_gymnax.py", "**/ppo_new_interface.py", "./ppo.py", "**/node_modules", "**/__pycache__"]  # temp for performance
+exclude = ["standalone/**/*", "sympol/utils/envs/drawing", "**/ppo_gymnax.py", "**/ppo_new_interface.py", "./ppo.py", "**/node_modules", "**/__pycache__"]  # temp for performance
 extends = "ray_utilities/pyproject.toml"
 reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"

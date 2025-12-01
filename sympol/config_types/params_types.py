@@ -1,0 +1,167 @@
+from __future__ import annotations
+from typing import Optional, Protocol
+from typing_extensions import NotRequired, Literal, TypeGuard, TypeAliasType, TypedDict
+
+
+class GeneralArgsDict(TypedDict, total=True):
+    exp_name: str
+    run_name: str
+    device: str
+    track: bool
+    seed: int
+    env_id: str
+    total_steps: int
+    eval_freq: int
+    minibatch_size: int
+    n_eval_episodes: int
+    n_envs: int
+    random_trials: int
+
+
+class ArgsDict(TypedDict, total=True):
+    use_best_config: bool
+    checkpoint: bool
+    overwrite_explicit: bool
+    adamW: bool
+    normEnv: bool
+    use_batch_norm: bool
+    SWA: bool
+    dynamic_buffer: bool
+    static_batch: bool
+    path: str
+    render_each_eval: bool
+    render_env: bool
+    reduce_lr: bool
+    gpu_number: int
+    optimize_config: bool
+    n_trials: int
+    view_size: int
+    actor: str
+    critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
+
+
+class PPOArgsDict(TypedDict, total=True):
+    gamma: float
+    gae_lambda: float
+    ent_coef: float
+    learning_rate_critic: float
+    n_update_epochs: int
+    n_steps: int
+    clip_vloss: bool
+    clip_coef: float
+    vf_coef: float
+    accumulate_gradients_every: int
+    max_grad_norm: float
+    target_kl: Optional[float]
+    norm_adv: bool
+
+
+class MLPModelArgsDict(TypedDict, total=True):
+    actor: Literal["mlp", "stateActionDT"] | str  # noqa: PYI051
+    num_layers: int
+    neurons_per_layer: int
+
+    learning_rate_actor: float
+
+
+class SDTModelArgsDict(TypedDict, total=True):
+    actor: Literal["sdt", "d-sdt"] | str  # noqa: PYI051
+    depth: int
+    temperature: float
+    action_type: Literal["discrete", "continuous"]
+
+    learning_rate_actor: float
+
+
+class SYMPOLModelArgsDict(TypedDict, total=True):
+    actor: Literal["sympol"] | str  # noqa: PYI051
+    depth: int
+    n_estimators: int
+    action_type: Literal["discrete", "continuous"]
+    learning_rate_actor_weights: float
+    learning_rate_actor_split_values: float
+    learning_rate_actor_split_idx_array: float
+    learning_rate_actor_leaf_array: float
+    learning_rate_actor_log_std: float
+
+    adamW: bool
+
+    subset_fraction: NotRequired[float]
+
+    dropout: NotRequired[float]
+    """Unused"""
+
+
+class SympolCatalogOptions(SYMPOLModelArgsDict, SDTModelArgsDict, MLPModelArgsDict):
+    critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
+    actor: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] | str  # noqa: PYI051
+
+
+class SDTArgsDict(SDTModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
+    pass
+
+
+class MLPArgsDict(MLPModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
+    pass
+
+
+class SYMPOLArgsDict(SYMPOLModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
+    pass
+
+
+class CLIArgsDict(SympolCatalogOptions, SYMPOLArgsDict, MLPArgsDict, SDTArgsDict):
+    pass
+
+
+class GeneralParams(TypedDict):
+    learning_rate_critic: float
+    reduce_lr: bool
+    minibatch_size: int
+    n_update_epochs: int
+    max_grad_norm: float
+    norm_adv: bool
+    ent_coef: float
+    vf_coef: float
+    gamma: float
+    gae_lambda: float
+    n_steps: NotRequired[int]
+    n_envs: NotRequired[int]
+
+
+class GeneralParamsWithLR(GeneralParams):
+    learning_rate_actor: float
+
+
+class MLPParams(GeneralParamsWithLR):
+    num_layers: int
+    neurons_per_layer: int
+    adamW: NotRequired[bool]
+
+
+class SDTParams(GeneralParamsWithLR):
+    depth: int
+    adamW: NotRequired[bool]
+    critic: Literal["mlp", "sdt"]
+    temperature: float
+    action_type: Literal["discrete", "continuous"]
+
+
+class SympolParams(GeneralParams):
+    depth: int
+    learning_rate_actor_weights: float
+    learning_rate_actor_split_values: float
+    learning_rate_actor_split_idx_array: float
+    learning_rate_actor_leaf_array: float
+    learning_rate_actor_log_std: float
+    learning_rate_critic: float
+    SWA: bool
+    adamW: bool
+    reduce_lr: bool
+    dropout: NotRequired[float]
+    """Unused"""
+    n_estimators: int
+    """Always 1"""
+    action_type: Literal["discrete", "continuous"]
+
+
+ParamsDictType = TypeAliasType("ParamsDictType", MLPParams | SDTParams | SympolParams)

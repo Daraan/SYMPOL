@@ -2,24 +2,24 @@ from typing import TYPE_CHECKING, cast
 
 import jax
 
-from ray_utilities.testing_utils import get_leafpath_value, patch_args
-from rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SympolSetupDefaults
+from ray_utilities.testing_utils import get_leafpath_value
+from sympol.rllib_port.sympol_setup import SympolSetup
+from tests._test_utils import SympolSetupDefaults, sympol_patch_args
 
 if TYPE_CHECKING:
     from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 
-    from rllib_port.core.sympol_module import SympolPPOModule
+    from sympol.rllib_port.core.sympol_module import SympolPPOModule
 
 
 class TestSympolLearner(SympolSetupDefaults):
-    @patch_args("-a", "sympol", "--accumulate_gradients_every", "2")
+    @sympol_patch_args("--accumulate_gradients_every", "2")
     def test_step_with_gradient_accumulation(self):
-        setup = SympolSetup()
-        # Only one step, to accumulate on every second algo.step call
-        setup.config.training(num_epochs=1, train_batch_size_per_learner=128, minibatch_size=128)
-        # self.assertEqual(setup.args.accumulate_gradients_every, 2)
-        # self.assertEqual(setup.config.learner_config_dict["accumulate_gradients_every"], 2)
+        with SympolSetup() as setup:
+            # Only one step, to accumulate on every second algo.step call
+            setup.config.training(num_epochs=1, train_batch_size_per_learner=128, minibatch_size=128)
+            # self.assertEqual(setup.args.accumulate_gradients_every, 2)
+            # self.assertEqual(setup.config.learner_config_dict["accumulate_gradients_every"], 2)
         algo = setup.build_algo()
         assert algo.config
         self.assertEqual(algo.config.minibatch_size, 128)

@@ -11,28 +11,29 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from config_types.args_types import SympolCLIArgs
-from mlp import Actor_MLP, Critic_MLP
 from ray_utilities.testing_utils import (
-    DisableBreakpointsForGUI,
+    DisableGUIBreakpoints,
     get_explicit_required_keys,
     get_explicit_unrequired_keys,
     get_leafpath_value,
     get_optional_keys,
     get_required_keys,
+    patch_args as _patch_args,
 )
 from ray_utilities.testing_utils import (
     SetupDefaults as _SetupDefaults,
 )
-from sdt import Actor_SDT, Critic_SDT
-from sympol import SYMPOL_RL
-from utils.utils import ActorTrainState, TrainState
+from sympol.config_types.args_types import SympolCLIArgs
+from sympol.mlp import Actor_MLP, Critic_MLP
+from sympol.sdt import Actor_SDT, Critic_SDT
+from sympol.sympol import SYMPOL_RL
+from sympol.utils.utils import ActorTrainState, TrainState
 
 if TYPE_CHECKING:
     import chex
 
 __all__ = [
-    "DisableBreakpointsForGUI",
+    "DisableGUIBreakpoints",
     "SympolSetupDefaults",
     "args_train_no_tuner",
     "clean_args",
@@ -41,17 +42,17 @@ __all__ = [
     "get_leafpath_value",
     "get_optional_keys",
     "get_required_keys",
-    "patch_args",
+    "sympol_patch_args",
 ]
 
-args_train_no_tuner = mock.patch.object(sys, "argv", ["file.py", "--no-render_env", "-J", "1", "-it", "2", "-np"])
+
+def sympol_patch_args(*args, **kwargs):
+    return _patch_args("--agent_type", "sympol", *args, **kwargs)
+
+
+args_train_no_tuner = sympol_patch_args("--no-render_env", "-J", "1", "-it", "2", "-np")
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
-
-
-def patch_args(*args):
-    """Patch sys.argv with the given args."""
-    return mock.patch.object(sys, "argv", ["file.py", *args])
 
 
 class SympolSetupDefaults(_SetupDefaults):

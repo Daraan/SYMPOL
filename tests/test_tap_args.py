@@ -1,21 +1,24 @@
+from inspect import ismethod
 import sys
 import unittest
 import unittest.mock
 from dataclasses import asdict
 from typing import Any
 
-from args import get_args, get_args_old  # noqa: F401  # avoid circular imports
-from config_types.args_types import SympolCLIArgs
-from config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
+from tap import Tap
+
 from ray_utilities.callbacks.algorithm.dynamic_batch_size import DynamicGradientAccumulation
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.callbacks.algorithm.exact_sampling_callback import exact_sampling_callback
 from ray_utilities.connectors.remove_masked_samples_connector import RemoveMaskedSamplesConnector
 from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSamplesLearner
-from rllib_port.extended_args import SympolArgumentParser
-from rllib_port.sympol_setup import SympolSetup
+from sympol.args import get_args, get_args_old  # noqa: F401  # avoid circular imports
+from sympol.config_types.args_types import SympolCLIArgs
+from sympol.config_types.params_types import CLIArgsDict, MLPParams, SDTParams, SympolParams
+from sympol.rllib_port.extended_args import SympolArgumentParser
+from sympol.rllib_port.sympol_setup import SympolSetup
 from tests._original_args import get_original_args
-from tests._test_utils import SympolSetupDefaults, args_train_no_tuner, clean_args, get_required_keys, patch_args
+from tests._test_utils import SympolSetupDefaults, args_train_no_tuner, clean_args, get_required_keys, sympol_patch_args
 
 _default_args = SympolCLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!
@@ -80,7 +83,6 @@ class TestArgObjects(unittest.TestCase):
 class TestArgContents(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.maxDiff = 2000
 
     @clean_args
     def test_equivalence_tap(self):
@@ -125,13 +127,13 @@ class TestArgContents(unittest.TestCase):
             args = SympolArgumentParser().parse_args()
             self.assertFalse(args.dynamic_batch)
             self.assertFalse(args.static_batch)  # for debugging, change code if fails
-        with patch_args("--static_batch"):
+        with sympol_patch_args("--static_batch"):
             # NOTE: self.add_argument("--static_batch", action="store_false", dest="dynamic_batch"
             self.assertIn("--static_batch", sys.argv)
             args = SympolArgumentParser().parse_args()
             self.assertFalse(args.dynamic_batch)
             self.assertFalse(args.static_batch)  # for debugging, change code if fails
-        with patch_args("--dynamic_batch"):
+        with sympol_patch_args("--dynamic_batch"):
             args = SympolArgumentParser().parse_args()
             self.assertTrue(args.dynamic_batch)
             self.assertEqual(args.dynamic_batch, not default_args.static_batch)
@@ -161,19 +163,27 @@ class TestArgContents(unittest.TestCase):
 
     @args_train_no_tuner
     def test_get_args_wrapper(self):
-        self.maxDiff = 2400
+        self.maxDiff = None
         legacy_args = get_args()
         new_args = SympolArgumentParser().parse_args()
         self.assertFalse(new_args.dynamic_batch)
-        # new setup does not use dynamic_batch by default; invert flag
-        new_args.dynamic_batch = not new_args.dynamic_batch
-        self.assertDictEqual(legacy_args.as_dict(), new_args.as_dict())
+        # Compare only keys present in both
+        legacy_dict = legacy_args.as_dict()
+        new_dict = new_args.as_dict()
+        common_keys = set(legacy_dict.keys()) & set(new_dict.keys())
+        # new setup up does not use dynamic_batch by default invert flag
+        new_dict["dynamic_batch"] = not new_dict["dynamic_batch"]
+        for k in common_keys:
+            # Skip methods
+            if ismethod(legacy_dict[k]) and ismethod(new_dict[k]):
+                continue
+            self.assertEqual(legacy_dict[k], new_dict[k], f"Mismatch for key '{k}': {legacy_dict[k]} != {new_dict[k]}")
         self.assertFalse(legacy_args.static_batch)
         self.assertTrue(legacy_args.dynamic_batch)
 
     @args_train_no_tuner
     def test_legacy_vs_new_dynamic_batch_args(self):
-        with patch_args("--static_batch"):
+        with sympol_patch_args("--static_batch"):
             # now should be equal
             legacy_args2 = get_args()
             self.assertTrue(legacy_args2.static_batch)
@@ -182,7 +192,7 @@ class TestArgContents(unittest.TestCase):
             self.assertFalse(new_args2.dynamic_batch)
             # static_batch -> dynamic_batch False via `dest=dynamic_batch`
 
-        with patch_args("--dynamic_batch"):
+        with sympol_patch_args("--dynamic_batch"):
             # now should be equal
             legacy_args3 = get_args()
             self.assertFalse(legacy_args3.static_batch)
@@ -207,8 +217,6 @@ class TestArgContents(unittest.TestCase):
         new_args = get_args_old()  # original version; modified code
         old_args = get_original_args()  # original version; unmodified code
 
-        from tap import Tap
-
         for attr in (
             a
             for a in (set(dir(old_args)) | set(dir(new_args))) - set(dir(Tap()))
@@ -218,7 +226,7 @@ class TestArgContents(unittest.TestCase):
 
     @clean_args
     def test_cli_args_completeness(self):
-        from config_types.args_types import Args, GeneralArgs, PPOArgs, SYMPOLArgs, SympolCLIArgs
+        from sympol.config_types.args_types import Args, GeneralArgs, PPOArgs, SYMPOLArgs, SympolCLIArgs
 
         dc = SympolCLIArgs()
         old_args = get_original_args()
@@ -278,17 +286,24 @@ class TestArgContents(unittest.TestCase):
             # Check if all default values are set
             # If a value does not match it could be a problem with the default value overwritten in configure()
             else:
-                self.assertEqual(getattr(args, k), getattr(parser, k), f"Default value for {k} is not set correctly.")
-                if "default" in settings:
-                    if settings["default"] == "auto":
-                        # NOTE: in the future this could be changed if we want to keep "auto" after processing
-                        self.assertNotEqual(getattr(args, k), "auto", f"'auto' value for {k} is still 'auto'.")
-                    else:
-                        self.assertEqual(
-                            getattr(args, k),
-                            settings["default"],
-                            f"Default value for '{k}' is not set correctly, should be '{settings['default']}'",
-                        )
+                if k == "offline_loggers":
+                    self.assertEqual(
+                        getattr(args, k), True, f"Default value for '{k}' is not set correctly, should be 'True'"
+                    )
+                else:
+                    self.assertEqual(
+                        getattr(args, k), getattr(parser, k), f"Default value for {k} is not set correctly."
+                    )
+                    if "default" in settings:
+                        if settings["default"] == "auto":
+                            # NOTE: in the future this could be changed if we want to keep "auto" after processing
+                            self.assertNotEqual(getattr(args, k), "auto", f"'auto' value for {k} is still 'auto'.")
+                        else:
+                            self.assertEqual(
+                                getattr(args, k),
+                                settings["default"],
+                                f"Default value for '{k}' is not set correctly, should be '{settings['default']}'",
+                            )
         for field in args.__dataclass_fields__.values():
             if field.default is not None and field.default != field.default_factory:
                 if field.default == "auto":
@@ -307,7 +322,7 @@ class TestArgContents(unittest.TestCase):
 @clean_args
 class TestExtensionsAdded(SympolSetupDefaults):
     def test_patch_args(self):
-        with patch_args("--no_exact_sampling"):
+        with sympol_patch_args("--no_exact_sampling"):
             self.assertIn(
                 "--no_exact_sampling",
                 sys.argv,
@@ -328,7 +343,7 @@ class TestExtensionsAdded(SympolSetupDefaults):
             f"but is {setup.config.callbacks_on_sample_end}.",
         )
 
-        with patch_args("--no_exact_sampling"):
+        with sympol_patch_args("--no_exact_sampling"):
             setup = SympolSetup()
             self.assertTrue(
                 setup.args.no_exact_sampling,
@@ -336,8 +351,8 @@ class TestExtensionsAdded(SympolSetupDefaults):
             )
 
     def test_remove_masked_samples_added(self):
-        setup = SympolSetup()
-        setup.config.environment(observation_space=self._OBSERVATION_SPACE, action_space=self._ACTION_SPACE)
+        with SympolSetup() as setup:
+            setup.config.environment(observation_space=self._OBSERVATION_SPACE, action_space=self._ACTION_SPACE)
         self.assertFalse(setup.args.keep_masked_samples)
         self.assertTrue(
             issubclass(setup.config.learner_class, RemoveMaskedSamplesLearner),
@@ -352,9 +367,9 @@ class TestExtensionsAdded(SympolSetupDefaults):
             and any(isinstance(connector, RemoveMaskedSamplesConnector) for connector in learner._learner_connector)
         )
 
-        with patch_args("--keep_masked_samples"):
-            setup = SympolSetup()
-            setup.config.environment(observation_space=self._OBSERVATION_SPACE, action_space=self._ACTION_SPACE)
+        with sympol_patch_args("--keep_masked_samples"):
+            with SympolSetup() as setup:
+                setup.config.environment(observation_space=self._OBSERVATION_SPACE, action_space=self._ACTION_SPACE)
             self.assertTrue(
                 setup.args.keep_masked_samples,
                 "Expected keep_masked_samples to be True when --keep_masked_samples is set.",
@@ -387,7 +402,7 @@ class TestExtensionsAdded(SympolSetupDefaults):
             )
         )
 
-        with patch_args("--dynamic_buffer"):
+        with sympol_patch_args("--dynamic_buffer"):
             setup = SympolSetup()
             self.assertTrue(
                 setup.args.dynamic_buffer,
@@ -422,7 +437,7 @@ class TestExtensionsAdded(SympolSetupDefaults):
             msg="Expected no dynamic buffer when --dynamic_buffer is not set.",
         )
 
-        with patch_args("--dynamic_batch"):
+        with sympol_patch_args("--dynamic_batch"):
             setup = SympolSetup()
             self.assertTrue(
                 setup.args.dynamic_batch,

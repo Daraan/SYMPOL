@@ -12,16 +12,17 @@ import jax
 import numpy.testing as npt
 from ray.rllib.core.columns import Columns
 
-import args  # noqa: F401
-from mlp import Critic_MLP
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
-from rllib_port.core.sympol_module import SympolPPOModule
-from rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
-from rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
-from rllib_port.sympol.sympol_model import SympolRLModel
-from rllib_port.sympol_setup import SympolSetup
-from sympol import SYMPOL_RL
-from tests._test_utils import DisableBreakpointsForGUI, SympolSetupDefaults, clean_args
+from ray_utilities.testing_utils import patch_args
+from sympol import args  # noqa: F401
+from sympol.mlp import Critic_MLP
+from sympol.rllib_port.core.sympol_module import SympolPPOModule
+from sympol.rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
+from sympol.rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
+from sympol.rllib_port.sympol.sympol_model import SympolRLModel
+from sympol.rllib_port.sympol_setup import SympolSetup
+from sympol.sympol import SYMPOL_RL
+from tests._test_utils import DisableGUIBreakpoints, SympolSetupDefaults, clean_args, sympol_patch_args
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 
 
 @clean_args
-class TestModels(DisableBreakpointsForGUI, SympolSetupDefaults):
+class TestModels(DisableGUIBreakpoints, SympolSetupDefaults):
     def test_sympol_creation(self):
         model = SympolRLModel(obs_dim=2, action_dim=self._ACTION_DIM, config=self._DEFAULT_CONFIG_DICT)  # pyright: ignore[reportArgumentType]
         model.init_state(self._ACTOR_KEY, jax.numpy.zeros((2, 2)))
@@ -99,7 +100,7 @@ class TestModels(DisableBreakpointsForGUI, SympolSetupDefaults):
                 npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
     def test_critic_mlp(self):
-        from rllib_port.mlp.mlp_model import CriticMLPModel
+        from sympol.rllib_port.mlp.mlp_model import CriticMLPModel
 
         model = CriticMLPModel(self._DEFAULT_CONFIG_DICT)
         with self.subTest("original_critic"):
@@ -113,7 +114,7 @@ class TestModels(DisableBreakpointsForGUI, SympolSetupDefaults):
         npt.assert_array_almost_equal(out, o_out, decimal=5)  # type: ignore
 
 
-class TestSympolModule(DisableBreakpointsForGUI, SympolSetupDefaults):
+class TestSympolModule(DisableGUIBreakpoints, SympolSetupDefaults):
     def test_module_setup(self):
         # Test
         module = SympolPPOModule(
@@ -268,17 +269,15 @@ class TestSympolModule(DisableBreakpointsForGUI, SympolSetupDefaults):
             self.assertNotEqual(hash(indicesC), hash(indicesB))
 
 
-class TestSetup(DisableBreakpointsForGUI, SympolSetupDefaults):
+class TestSetup(DisableGUIBreakpoints, SympolSetupDefaults):
     def test_setup_instantiation(self):
         for actor in ["sympol", "sdt", "mlp"]:
-            with mock.patch.object(sys, "argv", ["file.py", "--agent_type", actor]):
-                # fails as expects trial parameter
+            with patch_args("--agent_type", actor):
                 SympolSetup()
 
     def test_dynamic_buffer_callback(self):
         # Adding dynamic buffer
-        with mock.patch.object(sys, "argv", ["file.py", "--dynamic_buffer"]):
-            # fails as expects trial parameter
+        with sympol_patch_args("--dynamic_buffer"):
             config = SympolSetup().config
             assert (
                 config.callbacks_class is DynamicBufferUpdate
@@ -289,8 +288,7 @@ class TestSetup(DisableBreakpointsForGUI, SympolSetupDefaults):
                 )
             )
         # adding no buffer
-        with mock.patch.object(sys, "argv", ["file.py"]):
-            # fails as expects trial parameter
+        with sympol_patch_args():
             config = SympolSetup().config
             assert (
                 config.callbacks_class is not DynamicBufferUpdate

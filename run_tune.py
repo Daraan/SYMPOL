@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
 # Import comet (via ray_utilities) before other libraries (torch, tf, ...) to allow monkey patching.
 from ray_utilities import run_tune  # fmt: skip
-from rllib_port.sympol_setup import SympolSetup
+from sympol.rllib_port.sympol_setup import SympolSetup
 
 if __name__ == "__main__":
     setup = SympolSetup(init_param_space=True)

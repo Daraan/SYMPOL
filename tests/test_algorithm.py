@@ -1,16 +1,14 @@
-import sys
 import unittest
 from typing import TYPE_CHECKING, cast
-from unittest import mock
 
 import gymnasium as gym
-import jax
 
-from rllib_port.core.sympol_module import SympolPPOModule
-from rllib_port.sympol.sympol_model import SympolRLModel
-from rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SympolSetupDefaults, get_leafpath_value, patch_args
-from utils.envs import build_env
+from ray_utilities.testing_utils import patch_args
+from sympol.rllib_port.core.sympol_module import SympolPPOModule
+from sympol.rllib_port.sympol.sympol_model import SympolRLModel
+from sympol.rllib_port.sympol_setup import SympolSetup
+from sympol.utils.envs import build_env
+from tests._test_utils import SympolSetupDefaults, get_leafpath_value
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -25,8 +23,8 @@ class AlgorithmTests(SympolSetupDefaults):
     def setUp(self) -> None:
         SympolSetup.N_STEPS_DEFAULT = 3  # type: ignore
         super().setUp()
-        with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
-            self._SETUP = SympolSetup(init_param_space=False)
+        with patch_args("--agent_type", "sympol"), SympolSetup(init_param_space=False) as setup:
+            self._SETUP = setup
             self._ALGORITHM_CONFIG: PPOConfig
             self._ALGORITHM_CONFIG = config = self._SETUP.config  # type: ignore[assignment]
             config.learners(num_gpus_per_learner=0, num_cpus_per_learner=1)
@@ -45,25 +43,25 @@ class AlgorithmTests(SympolSetupDefaults):
                 config.training(
                     train_batch_size_per_learner=8, minibatch_size=4, shuffle_batch_per_epoch=False, num_epochs=2
                 )
-            """
-            env_to_module_connector: ((EnvType) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
-            module_to_env_connector: ((EnvType, RLModule) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
-            add_default_connectors_to_env_to_module_pipeline: bool | None = NotProvided,
-            add_default_connectors_to_module_to_env_pipeline: bool | None = NotProvided,
-            """
-            self._ENV = build_env("CartPole-v1", 2)
-            self._RL_MODULE_SPEC = self._ALGORITHM_CONFIG.get_rl_module_spec(self._ENV)
-            self._RL_MODULE = self._RL_MODULE_SPEC.build()
-            self.assertEqual(self._RL_MODULE_SPEC.module_class, SympolPPOModule)
+        """
+        env_to_module_connector: ((EnvType) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
+        module_to_env_connector: ((EnvType, RLModule) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
+        add_default_connectors_to_env_to_module_pipeline: bool | None = NotProvided,
+        add_default_connectors_to_module_to_env_pipeline: bool | None = NotProvided,
+        """
+        self._ENV = build_env("CartPole-v1", 2)
+        self._RL_MODULE_SPEC = self._ALGORITHM_CONFIG.get_rl_module_spec(self._ENV)
+        self._RL_MODULE = self._RL_MODULE_SPEC.build()
+        self.assertEqual(self._RL_MODULE_SPEC.module_class, SympolPPOModule)
 
     def test_algorithm_build_units(self):
-        with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
-            setup = SympolSetup(init_param_space=False)
-            algorithm_config = setup.config
-            algorithm_config.framework("torch")
-            cast("AlgorithmConfig", algorithm_config).training(  # pyright: ignore[reportUnnecessaryCast]
-                add_default_connectors_to_learner_pipeline=True,  # maybe false
-            )
+        with patch_args("--agent_type", "sympol"):
+            with SympolSetup(init_param_space=False) as setup:
+                algorithm_config = setup.config
+                algorithm_config.framework("torch")
+                cast("AlgorithmConfig", algorithm_config).training(  # pyright: ignore[reportUnnecessaryCast]
+                    add_default_connectors_to_learner_pipeline=True,  # maybe false
+                )
             """
             env_to_module_connector: ((EnvType) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
             module_to_env_connector: ((EnvType, RLModule) -> (ConnectorV2 | List[ConnectorV2])) | None = NotProvided,
@@ -91,16 +89,16 @@ class AlgorithmTests(SympolSetupDefaults):
 
     # @unittest.skip("Skip this test for now")
     def test_algorithm_build(self):
-        with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
-            setup = SympolSetup(init_param_space=False)
-            algorithm_config = setup.config
-            algorithm_config.framework("torch")
+        with patch_args("--agent_type", "sympol"):
+            with SympolSetup(init_param_space=False) as setup:
+                algorithm_config = setup.config
+                algorithm_config.framework("torch")
             algorithm_config.build_algo()
 
     def test_algorithm_train(self):
-        with mock.patch.object(sys, "argv", ["file.py", "--agent_type", "sympol"]):
-            setup = SympolSetup(init_param_space=False)
-            algorithm_config = setup.config
+        with patch_args("--agent_type", "sympol"):
+            with SympolSetup(init_param_space=False) as setup:
+                algorithm_config = setup.config
             # Does not comply with legacy:
             # algorithm_config.training(train_batch_size_per_learner=32, minibatch_size=8, num_epochs=2)
             algo = algorithm_config.build_algo()
