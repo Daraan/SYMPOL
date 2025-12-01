@@ -19,23 +19,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
+    - name: Python setup and install
+      uses: ./.github/actions/cached-python-setup
       with:
-        python-version: "3.10"
-    - name: Install dependencies
+        python-version: '3.10'
+        use-pip-cache: true
+        install-args: '.'
+    - name: Test with pytest (main tests)
       run: |
-        python -m pip install --upgrade pip
-        pip install \
-          pytest pytest-timeout\
-          graphviz \
-          tensorflow-probability[tf]==0.23.0 \
-          tf_keras==2.15.1 \
-        # conflicting dependencies in md_dtypes do second install
-        pip install git+https://github.com/Daraan/ray_utilities.git "ray<2.47" "jax>0.5" "flax" "distrax" "chex" "gymnax" "minigrid<3" "ml_dtypes>=0.5.0"
-    - name: Test with pytest
-      # Disable checkpoint tests until Ray's issues with checkpoint loading is solved
-      # ray_utilities are tested in submodule
-      run: |
+        source .venv/bin/activate
         pytest -k "not standalone and not checkpoint and not ray_utilities and not test_learner"  --timeout=600
+    - name: Test with pytest (learner tests)
+      run: |
+        source .venv/bin/activate
         pytest -k "test_learner and not ray_utilities"  --timeout=600

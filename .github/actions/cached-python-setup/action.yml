@@ -1,0 +1,95 @@
+# Composite action to set up Python, create a virtualenv, and install dependencies
+name: 'Cached Python Setup'
+description: 'Set up Python, create virtualenv, and install dependencies for testing.'
+inputs:
+  python-version:
+    description: 'Python version to use'
+    required: true
+    default: '3.10'
+  install-args:
+    description: 'Arguments to pass to pip install'
+    required: false
+    default: "'.' jax"
+  use-pip-cache:
+    description: 'Whether to use pip cache'
+    required: false
+    default: "false"
+outputs:
+  venv-cache-hit:
+    description: 'Whether the virtualenv cache was hit'
+    value: ${{ steps.cache-venv.outputs.cache-hit }}
+  pip-cache-hit:
+    description: 'Whether the pip cache was hit'
+    value: ${{ steps.setup-pip-cached.outputs.cache-hit }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache virtualenv
+      id: cache-venv
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('setup.py', 'pyproject.toml') }}
+        restore-keys: |
+          venv-${{ runner.os }}-
+    - name: Check and handle cache hit
+      shell: bash
+      run: |
+        if [ "${STEPS_CACHE_VENV_OUTPUTS_CACHE_HIT}" == "true" ]; then
+          echo "Cache hit on venv, skipping the rest of the jobs."
+          exit 0
+        else
+          echo "No cache hit on venv, proceeding with the setup."
+        fi
+      env:
+        STEPS_CACHE_VENV_OUTPUTS_CACHE_HIT: ${{ steps.cache-venv.outputs.cache-hit }}
+    - name: Set up Python (with pip cache)
+      if: ${{ inputs.use-pip-cache == 'true' && steps.cache-venv.outputs.cache-hit != 'true'}}
+      id: setup-pip-cached
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: 'pip'
+        cache-dependency-path: |
+          setup.py
+          pyproject.toml
+    - name: Set up Python (no pip cache)
+      if: ${{ inputs.use-pip-cache != 'true' && steps.cache-venv.outputs.cache-hit != 'true'}}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Report Cache hit
+      if: ${{ inputs.use-pip-cache == 'true' && steps.cache-venv.outputs.cache-hit != 'true'}}
+      shell: bash
+      run: |
+        if [ "${INPUTS_USE_PIP_CACHE}" == "true" ]; then
+          if [ -z "${STEPS_SETUP_PIP_CACHED_OUTPUTS_CACHE_HIT}" ]; then
+            echo "Cache hit for pip false"
+          else
+            echo "Cache hit for pip ${STEPS_SETUP_PIP_CACHED_OUTPUTS_CACHE_HIT}"
+          fi
+        fi
+      env:
+        INPUTS_USE_PIP_CACHE: ${{ inputs.use-pip-cache }}
+        STEPS_SETUP_PIP_CACHED_OUTPUTS_CACHE_HIT: ${{ steps.setup-pip-cached.outputs.cache-hit }}
+    - name: Set up virtualenv
+      if: ${{ steps.cache-venv.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: python -m venv .venv
+    - name: Install dependencies
+      if: ${{ steps.cache-venv.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        source .venv/bin/activate
+        pip install -U pip
+        pip install "${INPUTS_INSTALL_ARGS}" pyright
+      env:
+        INPUTS_INSTALL_ARGS: ${{ inputs.install-args }}
+    # Workaround for https://github.com/wandb/wandb/issues/10183
+    - name: Patch wandb install
+      if: ${{ steps.cache-venv.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        source .venv/bin/activate
+        WANDB_FILE=$(python -c "import wandb.sdk.lib.wb_logging as m; print(m.__file__)")
+        perl -i -pe 'BEGIN{undef $/;} s/    token = _run_id\.set\(_NOT_RUN_SPECIFIC\)\n    try:\n        yield\n    finally:\n        _run_id\.reset\(token\)/    if _run_id is not None:\n        token = _run_id.set(_NOT_RUN_SPECIFIC)\n    try:\n        yield\n    finally:\n        if _run_id is not None:\n            _run_id.reset(token)/s' "$WANDB_FILE"

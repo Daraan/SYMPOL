@@ -23,7 +23,7 @@ def get_action_type(env_id: str) -> Literal["discrete", "continuous"]:
         env.close()
         if isinstance(action_space, gym.spaces.Discrete):
             return "discrete"
-        elif isinstance(action_space, gym.spaces.Box):
+        if isinstance(action_space, gym.spaces.Box):
             return "continuous"
     except Exception:
         logger.exception(f"Could not create gym environment for id {env_id}. Using fallback for action type.")  # noqa: G004
