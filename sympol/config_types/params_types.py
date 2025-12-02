@@ -1,9 +1,9 @@
-from __future__ import annotations
-from typing import Optional, Protocol
-from typing_extensions import NotRequired, Literal, TypeGuard, TypeAliasType, TypedDict
+from typing import Optional
+
+from typing_extensions import Literal, NotRequired, TypeAliasType, TypedDict
 
 
-class GeneralArgsDict(TypedDict, total=True):
+class GeneralArgsDict(TypedDict):
     exp_name: str
     run_name: str
     device: str
@@ -18,7 +18,7 @@ class GeneralArgsDict(TypedDict, total=True):
     random_trials: int
 
 
-class ArgsDict(TypedDict, total=True):
+class ArgsDict(TypedDict):
     use_best_config: bool
     checkpoint: bool
     overwrite_explicit: bool
@@ -40,7 +40,7 @@ class ArgsDict(TypedDict, total=True):
     critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
 
 
-class PPOArgsDict(TypedDict, total=True):
+class PPOArgsDict(TypedDict):
     gamma: float
     gae_lambda: float
     ent_coef: float
@@ -51,12 +51,12 @@ class PPOArgsDict(TypedDict, total=True):
     clip_coef: float
     vf_coef: float
     accumulate_gradients_every: int
-    max_grad_norm: float
+    max_grad_norm: float | None
     target_kl: Optional[float]
     norm_adv: bool
 
 
-class MLPModelArgsDict(TypedDict, total=True):
+class MLPModelArgsDict(TypedDict):
     actor: Literal["mlp", "stateActionDT"] | str  # noqa: PYI051
     num_layers: int
     neurons_per_layer: int
@@ -64,7 +64,7 @@ class MLPModelArgsDict(TypedDict, total=True):
     learning_rate_actor: float
 
 
-class SDTModelArgsDict(TypedDict, total=True):
+class SDTModelArgsDict(TypedDict):
     actor: Literal["sdt", "d-sdt"] | str  # noqa: PYI051
     depth: int
     temperature: float
@@ -73,7 +73,7 @@ class SDTModelArgsDict(TypedDict, total=True):
     learning_rate_actor: float
 
 
-class SYMPOLModelArgsDict(TypedDict, total=True):
+class SYMPOLModelArgsDict(TypedDict):
     actor: Literal["sympol"] | str  # noqa: PYI051
     depth: int
     n_estimators: int
@@ -88,13 +88,26 @@ class SYMPOLModelArgsDict(TypedDict, total=True):
 
     subset_fraction: NotRequired[float]
 
+    grad_clip: float | None
+
+    SWA: bool
+
     dropout: NotRequired[float]
     """Unused"""
 
 
 class SympolCatalogOptions(SYMPOLModelArgsDict, SDTModelArgsDict, MLPModelArgsDict):
+    """
+    Options for the catalog.
+
+    Furthermore all keys defined in this class (and its parents) are required
+    should be included in the model_confi
+    """
+
     critic: Literal["mlp", "sdt", "sympol"] | str  # noqa: PYI051
     actor: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] | str  # noqa: PYI051
+    learning_rate_critic: float
+    seed: int
 
 
 class SDTArgsDict(SDTModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
@@ -118,7 +131,7 @@ class GeneralParams(TypedDict):
     reduce_lr: bool
     minibatch_size: int
     n_update_epochs: int
-    max_grad_norm: float
+    max_grad_norm: float | None
     norm_adv: bool
     ent_coef: float
     vf_coef: float

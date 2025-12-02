@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import argparse
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Literal
 
 from typing_extensions import Self, deprecated
 
+from ray_utilities.config.parser.default_argument_parser import DefaultArgumentParser
 from sympol.args import ArgumentParserWithDefaults
 from sympol.config_types.args_types import SympolCLIArgs
-from ray_utilities.config.parser.default_argument_parser import DefaultArgumentParser
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -18,6 +19,12 @@ logger = logging.getLogger(__name__)
 # circular import define after class
 def get_args():
     return SympolArgumentParser().parse_args()
+
+
+def _float_or_none(value: str) -> float | None:
+    if value.lower() in ("none", "null"):
+        return None
+    return float(value)
 
 
 class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, SympolCLIArgs):
@@ -35,6 +42,8 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
 
     legacy: bool = False
     """Use original SYMPOL implementation for PPO and batching"""
+
+    render_env: bool = False
 
     if TYPE_CHECKING:  # cannot overwrite attribute
 
@@ -60,12 +69,19 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
             default=False,  # will be stored in adamW
         )
         self.add_argument(
-            "--no-render_env",
-            dest="render_env",
-            action="store_false",
-            help="Flag to disable rendering of the environment",
+            "--render_env",
+            action="store_true",
+            help="Flag to enable rendering of the environment",
             required=False,
+            default=False,
         )
+        #self.add_argument(
+        #    "--no-render_env",
+        #    dest="render_env",
+        #    action="store_false",
+        #    help="Flag to disable rendering of the environment",
+        #    required=False,
+        #)
         self.add_argument(
             "--no-reduce_lr",
             dest="reduce_lr",
@@ -78,20 +94,30 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
         # NOTE: DefaultArgumentParser uses dynamic_batch=False
         self.add_argument("--static_batch", action="store_false", dest="dynamic_batch", required=False, default=False)
 
+        # legacy args for grad_clip
+        self.add_argument(
+            "--max-grad-norm",
+            type=_float_or_none,
+            dest="grad_clip",
+            default=DefaultArgumentParser.grad_clip,
+            help="Maximum gradient norm for clipping",
+        )
+
         # no args from fields
 
     # overwritten by dataclass from CLI Args
 
     def __setstate__(self, d: Dict[str, Any]) -> None:
         d.pop("use_comet_offline", None)  # do not set property
+        # TODO: There are more properties now
         return super().__setstate__(d)
 
     def process_args(self) -> None:
         super().process_args()
         if self.adamW is True:
             logger.error("AdamW is already True")
-        if self.seed is None and type(self).seed is not None:
-            logger.error("No seed found. But there should be one in the class. Should not happen.")
+        if self.seed is None and type(self).seed is not None: # pyright: ignore[reportUnnecessaryComparison]
+            logger.error("No seed found. But there should be one in the class. This should not happen.")
         self._process_args_sympol()
         self._process_args_ray_utilities()
         assert self.agent_type == self.actor
@@ -118,7 +144,13 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
             else:
                 explicit_args_corrected.append(some_arg)
         # FIXME: When using args with "dest" these will not match the dest
-        explicit_arg_values = {arg: getattr(self, arg) for arg in explicit_args_corrected}
+        dest_mapping = {}
+        for action in self._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                continue
+            if action.dest != action.option_strings[0].lstrip("-").replace("-", "_"):
+                dest_mapping[action.option_strings[0].lstrip("-").replace("-", "_")] = action.dest
+        explicit_arg_values = {arg: getattr(self, dest_mapping.get(arg, arg)) for arg in explicit_args_corrected}
 
         no_update = True
         if self.use_best_config:

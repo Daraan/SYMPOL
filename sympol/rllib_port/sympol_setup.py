@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import logging
+import sys
+from inspect import ismethod
 from typing import TYPE_CHECKING, Any, cast
 
 import jax
 from ray import tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
-from typing_extensions import deprecated
+from typing_extensions import NotRequired, deprecated
+from typing_extensions import get_origin as type_get_origin
 
-import sympol.configs as configs
 from ray_utilities.config import add_callbacks_to_config
 from ray_utilities.config.create_algorithm import create_algorithm_config
-from ray_utilities.connectors.jax.env_to_module import make_env_to_module_without_numpy
-from ray_utilities.connectors.jax.module_to_env import make_jax_module_to_env_connector
+from ray_utilities.connectors.jax.env_to_module import EnvToModuleWithoutNumpyConnector
+from ray_utilities.connectors.jax.module_to_env import MakeJaxModuleToEnvConnector
 from ray_utilities.learners import mix_learners
 from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugConnectors
-from ray_utilities.setup.algorithm_setup import AlgorithmSetup, AlgorithmType_co, ConfigType_co
-from ray_utilities.training.default_class import DefaultTrainable
+from ray_utilities.setup.algorithm_setup import AlgorithmSetup
+from sympol import configs
+from sympol.config_types.params_types import SympolCatalogOptions
 from sympol.rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from sympol.rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
@@ -26,13 +29,12 @@ if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
     from ray.rllib.core.learner import Learner
 
+    from ray_utilities.setup.experiment_base import NamespaceType
+
 logger = logging.getLogger(__name__)
 
 
 class SympolSetup(
-    # SetupWithDynamicBuffer[SympolArgumentParser],
-    # SetupWithDynamicBatchSize[SympolArgumentParser],
-    # ExperimentSetupBase[SympolArgumentParser],
     AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]
 ):
     PROJECT = "SYMPOL"
@@ -107,13 +109,34 @@ class SympolSetup(
             )
 
     @classmethod
+    def _model_config_from_args(cls, args: NamespaceType[SympolArgumentParser]) -> dict[str, Any] | None:
+        model_config = super()._model_config_from_args(args) or {}
+        # We want all of SympolCatalogOptions in there
+        for k in SympolCatalogOptions.__annotations__.keys():
+            if hasattr(args, k):
+                model_config[k] = getattr(args, k)
+            # not supported for 3.10 and typing_extensions 4.15
+            elif sys.version_info >= (3, 11) and k in SympolCatalogOptions.__required_keys__:
+                raise AttributeError(f"Args has no attribute {k} required for SympolCatalogOptions")
+            elif k in SympolCatalogOptions.__required_keys__:
+                annots = SympolCatalogOptions.__annotations__
+                if k in annots and type_get_origin(annots[k]) is NotRequired:
+                    # optional field
+                    continue
+                raise AttributeError(f"Args has no attribute {k} required for SympolCatalogOptions")
+        return model_config
+
+    @classmethod
     def _config_from_args(cls, args, base=None):
+        all_data = args.as_dict() if hasattr(args, "as_dict") else vars(args).copy()
+        all_data = {k: v for k, v in all_data.items() if not ismethod(v)}
         config, _spec = create_algorithm_config(
             args,
             env_type=args.env_type,
             module_class=SympolPPOModule,
             catalog_class=SympolJaxPPOCatalog,
-            model_config=args.as_dict() if hasattr(args, "as_dict") else vars(args).copy(),
+            # WTF we we store all data in here?
+            model_config=cls._model_config_from_args(args) or None,
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
             base_config=base,
@@ -126,17 +149,18 @@ class SympolSetup(
         config.env_runners(
             # env -> module
             add_default_connectors_to_env_to_module_pipeline=False,
-            env_to_module_connector=make_env_to_module_without_numpy(config, debug=DEBUG_CONNECTORS["env_to_module"]),
+            # NOTE: Connectors pin the algorithm in the current state, call after environment(...)
+            env_to_module_connector=EnvToModuleWithoutNumpyConnector(config, debug=DEBUG_CONNECTORS["env_to_module"]),
             # module -> env
             add_default_connectors_to_module_to_env_pipeline=False,
-            module_to_env_connector=make_jax_module_to_env_connector(
+            module_to_env_connector=MakeJaxModuleToEnvConnector(
                 config,
                 key=jax.random.fold_in(jax.random.PRNGKey(args.seed), sum(map(ord, "module_to_env_connector"))),
                 debug=DEBUG_CONNECTORS["module_to_env"],
             ),
             # TODO: Should set this in the defaults of the submodule
             num_envs_per_env_runner=4,  # env_context.vector_index
-            num_env_runners=4 if args.parallel else 1,  # env_context.worker_index
+            num_env_runners=2 if args.parallel else 0,  # env_context.worker_index
             num_cpus_per_env_runner=2 if args.parallel else 1,
         )
         # training settings
@@ -150,7 +174,6 @@ class SympolSetup(
         cast("AlgorithmConfig", config).training(
             add_default_connectors_to_learner_pipeline=True,
             # NOTE: Ray has a wrong typing for learner_connector
-            learner_class=mix_learners(learner_mix),
             # This is the size the learner receives per _update
             # Legacy minibatches are done in the learner
             learner_config_dict={
@@ -161,6 +184,10 @@ class SympolSetup(
                 "_debug_connectors": DEBUG_CONNECTORS["learner"],  # Not Implemented yet
             },
         )
+        try:  # new upcoming interface  # TODO: Check when this is changed ray 2.50+
+            config.learners(learner_class=mix_learners(learner_mix))  # pyright: ignore[reportCallIssue]
+        except TypeError:  # old interface
+            config.training(learner_class=mix_learners(learner_mix))
         # PPO specific training settings
         # config.training()
         if args.legacy:

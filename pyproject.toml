@@ -33,6 +33,7 @@ dependencies = [
   "optax",
   "gymnasium",
   "optuna",
+  "ray!=2.47.*",
   "ray_utilities[jax,test] @ git+https://github.com/Daraan/ray_utilities",
   "pytest",
   "pytest-timeout",

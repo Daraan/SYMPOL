@@ -62,7 +62,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         self.model_config: CLIArgsDict
         self.states: SympolPPOStateDict  # pyright: ignore[reportIncompatibleVariableOverride]
         super().__init__(
-            config=config,
+            config=config,  # deprecated
             observation_space=observation_space,
             action_space=action_space,
             inference_only=inference_only,

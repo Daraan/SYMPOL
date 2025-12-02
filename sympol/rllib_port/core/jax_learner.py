@@ -44,7 +44,7 @@ class _TfExample(EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, Value
 class JaxPPOLearnerWithLegacy(JaxPPOLearner):
     def build(self, **kwargs) -> None:
         super().build(**kwargs)
-        self._legacy = self.config.learner_config_dict.get("legacy", True)
+        self._legacy = self.config.learner_config_dict.get("legacy", False)
 
     def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
         if self._legacy:

@@ -3,34 +3,45 @@ from __future__ import annotations
 import sys
 from dataclasses import asdict
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, Optional, overload
 from unittest import mock
 
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import optax
+from ray.rllib.algorithms.ppo.ppo import PPO, PPOConfig
 
+from ray_utilities import DefaultTrainable
 from ray_utilities.testing_utils import (
+    _NOT_PROVIDED,
     DisableGUIBreakpoints,
+    TestHelpers,
     get_explicit_required_keys,
     get_explicit_unrequired_keys,
     get_leafpath_value,
     get_optional_keys,
     get_required_keys,
-    patch_args as _patch_args,
 )
 from ray_utilities.testing_utils import (
     SetupDefaults as _SetupDefaults,
 )
+from ray_utilities.testing_utils import (
+    patch_args as _patch_args,
+)
 from sympol.config_types.args_types import SympolCLIArgs
 from sympol.mlp import Actor_MLP, Critic_MLP
+from sympol.rllib_port.core.sympol_module import SympolPPOModule
+from sympol.rllib_port.extended_args import SympolArgumentParser
+from sympol.rllib_port.sympol_setup import SympolSetup
 from sympol.sdt import Actor_SDT, Critic_SDT
 from sympol.sympol import SYMPOL_RL
 from sympol.utils.utils import ActorTrainState, TrainState
 
 if TYPE_CHECKING:
     import chex
+
+    from ray_utilities.typing.metrics import AutoExtendedLogMetricsDict
 
 __all__ = [
     "DisableGUIBreakpoints",
@@ -44,6 +55,108 @@ __all__ = [
     "get_required_keys",
     "sympol_patch_args",
 ]
+
+
+_DefinedSympolParser = DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]
+
+class SympolTestHelpers(TestHelpers):
+
+    @overload
+    def get_trainable(
+        self,
+        *,
+        num_env_runners: int = 0,
+        env_seed: int | None | _NOT_PROVIDED = _NOT_PROVIDED,
+        train: Any = True,
+        fast_model: bool = True,
+        eval_interval: Optional[int] = 1,
+        class_only: Literal[True],
+        ignore_argv: bool = True,
+        setup_class = SympolSetup,
+    ) -> type[_DefinedSympolParser]: ...
+
+    @overload
+    def get_trainable(
+        self,
+        *,
+        num_env_runners: int = 0,
+        env_seed: int | None | _NOT_PROVIDED = _NOT_PROVIDED,
+        train: Literal[True] = True,
+        fast_model: bool = True,
+        eval_interval: Optional[int] = 1,
+        class_only: Literal[False] = False,
+        ignore_argv: bool = True,
+        setup_class = SympolSetup,
+    ) -> tuple[_DefinedSympolParser, AutoExtendedLogMetricsDict]: ...
+
+    @overload
+    def get_trainable(
+        self,
+        *,
+        num_env_runners: int = 0,
+        env_seed: int | None | _NOT_PROVIDED = _NOT_PROVIDED,
+        train: Literal[False],
+        fast_model: bool = True,
+        eval_interval: Optional[int] = 1,
+        class_only: Literal[False] = False,
+        ignore_argv: bool = True,
+        #setup_class = SympolSetup,
+    ) -> tuple[_DefinedSympolParser, None]: ...
+
+    def get_trainable(
+        self,
+        *,
+        num_env_runners: int = 0,
+        env_seed: int | None | _NOT_PROVIDED = 0,
+        setup_class=SympolSetup,
+        train: bool = True,
+        depth: int = 2,
+        class_only: bool = False,
+        **setup_kwargs,
+    ) -> type[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]] | tuple[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO], AutoExtendedLogMetricsDict | None]:
+        with _patch_args(
+            "--agent_type",
+            "sympol",
+            "--depth",
+            depth,
+        ):
+            if class_only:
+                return super().get_trainable(
+                    num_env_runners=num_env_runners,
+                    fast_model=False,
+                    env_seed=env_seed,
+                    ignore_argv=False,
+                    setup_class=setup_class,
+                    train=train,
+                    class_only=True,
+                    **setup_kwargs,
+                )
+            # weird type error if we do not check for train bool
+            if train:
+                trainable, result = super().get_trainable(
+                    num_env_runners=num_env_runners,
+                    fast_model=False,
+                    env_seed=env_seed,
+                    ignore_argv=False,
+                    setup_class=setup_class,
+                    class_only=False,
+                    train=train,
+                    **setup_kwargs,
+                )
+            else:
+                trainable, result = super().get_trainable(
+                    num_env_runners=num_env_runners,
+                    fast_model=False,
+                    env_seed=env_seed,
+                    ignore_argv=False,
+                    setup_class=setup_class,
+                    class_only=False,
+                    train=train,
+                    **setup_kwargs,
+                )
+        module = trainable.algorithm.get_module()
+        self.assertIsInstance(module, SympolPPOModule)
+        return trainable, result
 
 
 def sympol_patch_args(*args, **kwargs):

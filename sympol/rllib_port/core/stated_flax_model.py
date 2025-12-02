@@ -46,13 +46,15 @@ class StatedActorFlaxRLModel(FlaxRLModel[ModelType, _ConfigType]):
         if config.get("adamW", False):
             logger.warning("adamW=True is set for a non SYMPOL actor. Check if correct")
         optimizer_cls = optax.adamw if config.get("adamW", False) else optax.adam
+        grad_clip = config["grad_clip"] if "grad_clip" in config else config["max_grad_norm"]
+        gradient_transformations = []
+        if grad_clip is not None:
+            gradient_transformations.append(optax.clip_by_global_norm(grad_clip))
+        gradient_transformations.append(optax.inject_hyperparams(optimizer_cls)(config["learning_rate_actor"]))
         actor_state = ActorTrainState.create(
             apply_fn=None,
             params=self.model.init(actor_key, jnp.array([sample])),
-            tx=optax.chain(
-                optax.clip_by_global_norm(config["max_grad_norm"]),
-                optax.inject_hyperparams(optimizer_cls)(config["learning_rate_actor"]),
-            ),
+            tx=optax.chain(*gradient_transformations),
             # TODO: can likely skip second init call
             grad_accum=jax.tree.map(jnp.zeros_like, self.model.init(actor_key, jnp.array([sample]))),
             indices=None,
@@ -71,12 +73,14 @@ class StatedCriticFlaxRLModel(FlaxRLModel[ModelType, _ConfigType]):
         if config is None:
             config = self.config
         optimizer = optax.adamw if config.get("adamW", False) else optax.adam
+        grad_clip = config["grad_clip"] if "grad_clip" in config else config["max_grad_norm"]
+        gradient_transformations = []
+        if grad_clip is not None:
+            gradient_transformations.append(optax.clip_by_global_norm(grad_clip))
+        gradient_transformations.append(optimizer(learning_rate=config["learning_rate_critic"]))
         critic_state = TrainState.create(
             apply_fn=None,
             params=self.model.init(rng, jnp.array([sample])),
-            tx=optax.chain(
-                optax.clip_by_global_norm(config["max_grad_norm"]),
-                optimizer(learning_rate=config["learning_rate_critic"]),
-            ),
+            tx=optax.chain(*gradient_transformations),
         )
         return critic_state

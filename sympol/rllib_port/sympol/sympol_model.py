@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     import chex
     from ray.rllib.utils.typing import TensorType
 
-    from sympol.config_types.params_types import SYMPOLModelArgsDict, SympolParams
     from ray_utilities.typing.model_return import Batch
+    from sympol.config_types.params_types import SYMPOLModelArgsDict, SympolParams
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,8 @@ class SympolRLModel(JaxRLModel):
         else:
             optimizer = optax.adam
 
-        gradient_transformations = (
-            optax.clip_by_global_norm(config["max_grad_norm"]),
+        gradient_transformations: list[optax.GradientTransformation] = [
+            # grad_clip is rllib max_grad_norm is legacy
             optax.multi_transform(
                 {
                     "estimator_weights": optax.inject_hyperparams(optax.adam)(config["learning_rate_actor_weights"]),
@@ -95,11 +95,14 @@ class SympolRLModel(JaxRLModel):
                 },
                 map_nested_fn(lambda k, _: k),
             ),
-        )
+        ]
+        grad_clip = config["grad_clip"] if "grad_clip" in config else config["max_grad_norm"]
+        if grad_clip is not None:
+            gradient_transformations.insert(0, optax.clip_by_global_norm(grad_clip))
         if config["SWA"]:
             from optax_swag import swag
 
-            gradient_transformations = (*gradient_transformations, swag(10, 2))
+            gradient_transformations.append(swag(10, 2))
 
         actor_state = ActorTrainState.create(
             apply_fn=None,

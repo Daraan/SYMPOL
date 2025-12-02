@@ -25,11 +25,11 @@ jobs:
         python-version: '3.10'
         use-pip-cache: true
         install-args: '.'
-    - name: Test with pytest (main tests)
+    - name: Test Basic
       run: |
         source .venv/bin/activate
-        pytest -k "not standalone and not checkpoint and not ray_utilities and not test_learner"  --timeout=600
-    - name: Test with pytest (learner tests)
+        pytest -v -k "not test_trainable_port"
+    - name: Test Integraction
       run: |
         source .venv/bin/activate
-        pytest -k "test_learner and not ray_utilities"  --timeout=600
+        pytest -kv -k "test_trainable_port" --timeout=600
