@@ -31,7 +31,7 @@ from matplotlib import pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
 
-from  sympol import configs
+from sympol import configs
 import wandb
 from sympol.args import get_args
 from sympol.mlp import Actor_MLP, Actor_MLP_Continuous, Critic_MLP

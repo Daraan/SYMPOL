@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy.testing as npt
 
 from ray_utilities.connectors.dummy_connector import DummyNumpyToTensor
-from tests._test_utils import SympolSetupDefaults
+from sympol._test_utils import SympolSetupDefaults
 
 
 class TestSetupDefaults(SympolSetupDefaults):

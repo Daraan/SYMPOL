@@ -75,13 +75,13 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
             required=False,
             default=False,
         )
-        #self.add_argument(
+        # self.add_argument(
         #    "--no-render_env",
         #    dest="render_env",
         #    action="store_false",
         #    help="Flag to disable rendering of the environment",
         #    required=False,
-        #)
+        # )
         self.add_argument(
             "--no-reduce_lr",
             dest="reduce_lr",
@@ -116,7 +116,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
         super().process_args()
         if self.adamW is True:
             logger.error("AdamW is already True")
-        if self.seed is None and type(self).seed is not None: # pyright: ignore[reportUnnecessaryComparison]
+        if self.seed is None and type(self).seed is not None:  # pyright: ignore[reportUnnecessaryComparison]
             logger.error("No seed found. But there should be one in the class. This should not happen.")
         self._process_args_sympol()
         self._process_args_ray_utilities()

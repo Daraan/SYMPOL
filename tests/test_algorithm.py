@@ -1,14 +1,14 @@
-import unittest
 from typing import TYPE_CHECKING, cast
 
 import gymnasium as gym
+import pytest
 
 from ray_utilities.testing_utils import patch_args
+from sympol._test_utils import SympolSetupDefaults, get_leafpath_value
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
 from sympol.rllib_port.sympol.sympol_model import SympolRLModel
 from sympol.rllib_port.sympol_setup import SympolSetup
 from sympol.utils.envs import build_env
-from tests._test_utils import SympolSetupDefaults, get_leafpath_value
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -175,7 +175,7 @@ class AlgorithmTests(SympolSetupDefaults):
                     msg="critic: learner_module vs algo_module",
                 )
 
-    @unittest.skip("Skip this test. Fails test but works with real inputs.")
+    @pytest.mark.xfail(reason="Skip this test. Fails test but works with real inputs.")
     def test_module_to_env(self):
         module_to_env = self._ALGORITHM_CONFIG.build_module_to_env_connector(self._ENV)
         model = SympolRLModel(obs_dim=2, action_dim=self._ACTION_DIM, config=self._DEFAULT_CONFIG_DICT)  # pyright: ignore[reportArgumentType]

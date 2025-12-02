@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
+from frozendict import frozendict
 import jax
 import jax.numpy as jnp
 from ray.rllib.core.columns import Columns
@@ -42,8 +43,22 @@ class _TfExample(EntropyCoeffSchedule, KLCoeffMixin, LearningRateSchedule, Value
 
 
 class JaxPPOLearnerWithLegacy(JaxPPOLearner):
-    def build(self, **kwargs) -> None:
-        super().build(**kwargs)
+    def build(
+        self,
+        jit_update_static_argnames: Sequence[str] = ("indices",),
+        jit_forward_kwargs: Optional[dict[str, Any]] = None,
+        jit_update_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> None:
+        assert "indices" in jit_update_static_argnames
+        jit_forward_kwargs = jit_forward_kwargs or {}
+        jit_forward_kwargs.setdefault("static_argnames", []).append("indices")
+        super().build(
+            jit_update_static_argnames=jit_update_static_argnames,
+            jit_forward_kwargs=jit_forward_kwargs,
+            jit_update_kwargs=jit_update_kwargs,
+            **kwargs,
+        )
         self._legacy = self.config.learner_config_dict.get("legacy", False)
 
     def _update(self, batch: dict[str, Any] | SampleBatch, **kwargs) -> tuple[Any, Any, Any]:
@@ -53,7 +68,9 @@ class JaxPPOLearnerWithLegacy(JaxPPOLearner):
             # Does NOT fill fwd_out
             fwd_out, loss_per_module = self._legacy_update(batch, **kwargs)
             return fwd_out, loss_per_module, self.metrics.deactivate_tensor_mode()
-        return super()._update(batch, **kwargs)
+        indices = {mid: self.module[mid].states["actor"].indices for mid in batch}
+        indices = frozendict(indices)
+        return super()._update(batch, indices=indices, **kwargs)
 
     def _legacy_update(self, batch: dict[str, Any] | SampleBatch[jax.Array]) -> tuple[Any, Any]:
         fwd_out = dict.fromkeys(batch.keys(), None)
@@ -96,7 +113,7 @@ class JaxPPOLearnerWithLegacy(JaxPPOLearner):
                 storage2,
                 key,
                 self.config.learner_config_dict["accumulate_gradients_every"],
-                minibatch_size=self.config.learner_config_dict["legacy_minibatch_size"],
+                minibatch_size=self.config.learner_config_dict.get("legacy_minibatch_size", self.config.minibatch_size),
                 n_update_epochs=args.n_update_epochs,
                 args=args,
                 actor=actor,

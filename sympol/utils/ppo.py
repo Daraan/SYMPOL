@@ -158,10 +158,10 @@ def update_ppo(
 
         # taken from: https://github.com/google/brax/blob/main/brax/training/agents/ppo/train.py
         def convert_data(x: jnp.ndarray):
-            num_minibatches = int(np.floor(x.shape[0] / minibatch_size))
+            num_minibatches = max(1, int(np.floor(x.shape[0] / minibatch_size)))
             size = num_minibatches * minibatch_size
             x = jax.random.permutation(subkey, x)[:size]
-            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
+            x = jnp.reshape(x, (num_minibatches, -1, *x.shape[1:]))
             return x
 
         flatten_storage = jax.tree_util.tree_map(flatten, storage)

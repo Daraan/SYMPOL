@@ -15,6 +15,7 @@ from ray.rllib.core.columns import Columns
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.testing_utils import patch_args
 from sympol import args  # noqa: F401
+from sympol._test_utils import DisableGUIBreakpoints, SympolSetupDefaults, clean_args, sympol_patch_args
 from sympol.mlp import Critic_MLP
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
 from sympol.rllib_port.mlp.mlp_model import ActorMLPModel, CriticMLPModel
@@ -22,12 +23,8 @@ from sympol.rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
 from sympol.rllib_port.sympol.sympol_model import SympolRLModel
 from sympol.rllib_port.sympol_setup import SympolSetup
 from sympol.sympol import SYMPOL_RL
-from tests._test_utils import DisableGUIBreakpoints, SympolSetupDefaults, clean_args, sympol_patch_args
 
 if TYPE_CHECKING:
-    from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
-    from ray.rllib.connectors.env_to_module.env_to_module_pipeline import EnvToModulePipeline
-
     from ray_utilities.jax.jax_model import PureJaxModelProtocol
 
 # os.environ["RAY_DEBUG"] = "legacy"

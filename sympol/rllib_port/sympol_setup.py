@@ -34,9 +34,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolSetup(
-    AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]
-):
+class SympolSetup(AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]):
     PROJECT = "SYMPOL"
 
     GROUP = "NO_GROUP_SET"

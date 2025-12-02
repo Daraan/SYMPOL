@@ -1,13 +1,10 @@
-import socket
-import sys
 from typing import TYPE_CHECKING
-from unittest import mock
 
+from ray_utilities.testing_utils import patch_args
+from sympol._test_utils import SympolSetupDefaults, args_train_no_tuner
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
 from sympol.rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SympolSetupDefaults, args_train_no_tuner
 from sympol.utils.envs import build_env
-from ray_utilities.testing_utils import patch_args
 
 if TYPE_CHECKING:
     from ray.rllib.algorithms.ppo import PPOConfig
@@ -53,7 +50,7 @@ class TestTraining(SympolSetupDefaults):
     def test_trainable(self):
         # with self.subTest("No parameters"):
         #    _result = trainable({})
-        with self.subTest("With parameters"), patch_args(*sys.argv[1:], "--hostname_selector", socket.gethostname()):
+        with self.subTest("With parameters"):
             with SympolSetup(init_param_space=True) as setup:
                 setup.config.evaluation(evaluation_interval=1)
                 setup.config.training(num_epochs=4, train_batch_size_per_learner=512, minibatch_size=64)

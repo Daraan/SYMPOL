@@ -168,10 +168,20 @@ class SYMPOL_RL:
         )
         split_index_array = split_index_array - jax.lax.stop_gradient(adjust_constant)
         # jax.debug.print("inputs: {} shape:{}", inputs[0], inputs.shape)
+        # jax.debug.print("inputs: {} shape:{}", inputs[0], inputs.shape)
         # jax.debug.print("split_index_array: {} shape:{}", split_index_array[0, 0], split_index_array.shape)
+        # jax.debug.print("split_index_array: {} shape:{}", split_index_array[0, 0], split_index_array.shape)
+
         # jax.debug.print("X_estimator: {} shape: {}", X_estimator[0], X_estimator.shape)
+        # jax.debug.print("X_estimator: {} shape: {}", X_estimator[0], X_estimator.shape)
+
+        # jax.debug.print("features_by_estimator: shape: {}", features_by_estimator.shape)
         # jax.debug.print("features_by_estimator: {} shape: {}", features_by_estimator[0], features_by_estimator.shape)
-        # as split_index_array_selected is one-hot-encoded, taking the sum over the last axis after multiplication results in selecting the desired value at the index
+
+        # jax.debug.print("estimator_weights shape {}", estimator_weights.shape)
+
+        # as split_index_array_selected is one-hot-encoded, taking the sum over the last axis
+        # after multiplication results in selecting the desired value at the index
         s1_sum = jnp.einsum("ein,ein->ei", split_values, split_index_array)
         s2_sum = jnp.einsum("ben,ein->bei", X_estimator, split_index_array)
         # s2_sum = jnp.einsum("bn,ein->bei", inputs, split_index_array)
@@ -185,8 +195,10 @@ class SYMPOL_RL:
 
         # the resulting shape of the tensors is (b, e, l, d):
         node_result_extended = node_result_corrected[:, :, internal_node_index_list]
+        # jax.debug.print("node_result_extended shape {}", node_result_extended.shape)
         # jax.debug.print("node_result_extended {}: {}", node_result_extended.shape, node_result_extended)
-        # reduce the path via multiplication to get result for each path (in each estimator) based on the results of the corresponding internal nodes (output shape: (b, e, l))
+        # reduce the path via multiplication to get result for each path (in each estimator) based on the results
+        # of the corresponding internal nodes (output shape: (b, e, l))
         p = jnp.prod(
             ((1 - path_identifier_list) * node_result_extended + path_identifier_list * (1 - node_result_extended)),
             axis=3,
@@ -197,7 +209,9 @@ class SYMPOL_RL:
 
         # use softmax over weights for each instance
         estimator_weights_leaf_softmax = jax.nn.softmax(estimator_weights_leaf)
-        # jax.debug.print("estimator_weights_leaf_softmax {}: {}", estimator_weights_leaf_softmax.shape, estimator_weights_leaf_softmax)
+        # jax.debug.print("estimator_weights_leaf_softmax shape {}", estimator_weights_leaf_softmax.shape)
+        # jax.debug.print("estimator_weights_leaf_softmax {}", estimator_weights_leaf_softmax)
+
         # get raw prediction for each estimator
         if self.action_type == "continuous":
             layer_output = jnp.einsum("elc,bel->bec", leaf_classes_array, p)

@@ -11,6 +11,7 @@ from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
 
 from ray_utilities.jax.distributions.get_distributions_mixin import GetJaxDistributionsMixin
+from ray_utilities.jax.jax_module import JaxModuleState
 from ray_utilities.jax.ppo.jax_ppo_module import JaxActorCriticStateDict, JaxPPOModule
 from sympol.rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from sympol.rllib_port.mlp.mlp_model import CriticMLPModel
@@ -21,9 +22,10 @@ if TYPE_CHECKING:
     import gymnasium as gym
     from flax.core import FrozenDict
     from numpy.typing import NDArray
+    from ray.rllib.utils.typing import StateDict
 
-    from sympol.config_types.params_types import CLIArgsDict
     from ray_utilities.dummy_encoder import DummyActorCriticEncoder
+    from sympol.config_types.params_types import CLIArgsDict, SympolCatalogOptions
     from sympol.rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
     from sympol.rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
     from sympol.rllib_port.sympol.sympol_model import SympolRLModel
@@ -37,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 class SympolPPOStateDict(JaxActorCriticStateDict):
     actor: ActorTrainState  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class SympolModuleState(JaxModuleState):
+    model_config: SympolCatalogOptions | StateDict  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
@@ -59,7 +65,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         catalog_class = kwargs.pop("catalog_class", None)
         if catalog_class is None:
             catalog_class = SympolJaxPPOCatalog
-        self.model_config: CLIArgsDict
+        self.model_config: SympolCatalogOptions
         self.states: SympolPPOStateDict  # pyright: ignore[reportIncompatibleVariableOverride]
         super().__init__(
             config=config,  # deprecated
@@ -158,6 +164,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         model_out = self.pi(
             encoder_outs[ENCODER_OUT][ACTOR],
             parameters=parameters,
+            # As indices are kind of constant we can use this fallback
             indices=self.states[ACTOR].indices if indices is None else indices,
             **kwargs,
         )
@@ -176,7 +183,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         *args,  # noqa: ARG002
         inference_only: bool = False,
         **kwargs,  # noqa: ARG002
-    ) -> SympolPPOStateDict:
+    ) -> SympolModuleState:
         state_dict = self.states
         # critic state not needed; possibly only bother when using GPU
         # however, if we copy the dict -> key updates are not performed -> repeated usage of keys!
@@ -186,7 +193,37 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
             for key in list(state_dict.keys()):
                 if any(key.startswith(a) and (len(key) == len(a) or key[len(a)] == ".") for a in attr):
                     del state_dict[key]
-        return state_dict
+        return {"jax_state": state_dict, "model_config": self.model_config}
+
+    def set_state(self, state: JaxModuleState | StateDict | SympolModuleState) -> None:
+        if "model_config" in state:
+            state = state.copy()
+            new_config = state.get("model_config")
+            build_new = None
+            if new_config and self.model_config != new_config:
+                self.model_config = new_config
+                self.catalog = type(self.catalog)(self.observation_space, self.action_space, new_config)  # pyright: ignore[reportArgumentType]
+                self.setup()
+                build_new = False
+            if self.model_config:
+                # with catalog update these all should now be fine.
+                if self.pi.config != self.pi.config | self.model_config:
+                    # model needs update
+                    logger.info("Updating pi model config in set_state")
+                    # self.pi.config = self.pi.config.update(self.model_config)
+                    # should rebuild it entirely
+                    build_new = True
+                if hasattr(self, "vf") and self.vf.config != self.vf.config | self.model_config:
+                    logger.info("Updating vf model config in set_state")
+                    build_new = True
+                if build_new:
+                    # setup catalog just to be sure
+                    self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
+                    self.setup()
+                    assert self.pi.config == self.pi.config | self.model_config
+                    assert not hasattr(self, "vf") or self.vf.config == self.vf.config | self.model_config
+            # TODO need to updates models
+        super().set_state(state)
 
     # region non-rllib interface
 

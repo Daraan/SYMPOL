@@ -57,10 +57,10 @@ __all__ = [
 ]
 
 
-_DefinedSympolParser = DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]
+_SympolTrainable = DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]
+
 
 class SympolTestHelpers(TestHelpers):
-
     @overload
     def get_trainable(
         self,
@@ -72,8 +72,8 @@ class SympolTestHelpers(TestHelpers):
         eval_interval: Optional[int] = 1,
         class_only: Literal[True],
         ignore_argv: bool = True,
-        setup_class = SympolSetup,
-    ) -> type[_DefinedSympolParser]: ...
+        setup_class=SympolSetup,
+    ) -> type[_SympolTrainable]: ...
 
     @overload
     def get_trainable(
@@ -86,8 +86,8 @@ class SympolTestHelpers(TestHelpers):
         eval_interval: Optional[int] = 1,
         class_only: Literal[False] = False,
         ignore_argv: bool = True,
-        setup_class = SympolSetup,
-    ) -> tuple[_DefinedSympolParser, AutoExtendedLogMetricsDict]: ...
+        setup_class=SympolSetup,
+    ) -> tuple[_SympolTrainable, AutoExtendedLogMetricsDict]: ...
 
     @overload
     def get_trainable(
@@ -100,8 +100,8 @@ class SympolTestHelpers(TestHelpers):
         eval_interval: Optional[int] = 1,
         class_only: Literal[False] = False,
         ignore_argv: bool = True,
-        #setup_class = SympolSetup,
-    ) -> tuple[_DefinedSympolParser, None]: ...
+        # setup_class = SympolSetup,
+    ) -> tuple[_SympolTrainable, None]: ...
 
     def get_trainable(
         self,
@@ -113,13 +113,16 @@ class SympolTestHelpers(TestHelpers):
         depth: int = 2,
         class_only: bool = False,
         **setup_kwargs,
-    ) -> type[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]] | tuple[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO], AutoExtendedLogMetricsDict | None]:
+    ) -> (
+        type[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]]
+        | tuple[DefaultTrainable[SympolArgumentParser, PPOConfig, PPO], AutoExtendedLogMetricsDict | None]
+    ):
         with _patch_args(
             "--agent_type",
             "sympol",
-            "--depth",
-            depth,
-        ):
+            "--depth", depth,
+            #"--num_learners", 1,
+        ):  # fmt: skip
             if class_only:
                 return super().get_trainable(
                     num_env_runners=num_env_runners,

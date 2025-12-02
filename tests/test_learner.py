@@ -4,7 +4,7 @@ import jax
 
 from ray_utilities.testing_utils import get_leafpath_value
 from sympol.rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SympolSetupDefaults, sympol_patch_args
+from sympol._test_utils import SympolSetupDefaults, sympol_patch_args
 
 if TYPE_CHECKING:
     from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner

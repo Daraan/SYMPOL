@@ -18,7 +18,13 @@ from sympol.config_types.params_types import CLIArgsDict, MLPParams, SDTParams, 
 from sympol.rllib_port.extended_args import SympolArgumentParser
 from sympol.rllib_port.sympol_setup import SympolSetup
 from tests._original_args import get_original_args
-from tests._test_utils import SympolSetupDefaults, args_train_no_tuner, clean_args, get_required_keys, sympol_patch_args
+from sympol._test_utils import (
+    SympolSetupDefaults,
+    args_train_no_tuner,
+    clean_args,
+    get_required_keys,
+    sympol_patch_args,
+)
 
 _default_args = SympolCLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!

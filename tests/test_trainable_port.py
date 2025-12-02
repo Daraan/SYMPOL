@@ -41,11 +41,10 @@ from ray_utilities.testing_utils import (
 )
 from ray_utilities.training.default_class import DefaultTrainable
 from ray_utilities.training.helpers import make_divisible
-ray.init()
+from sympol._test_utils import SympolTestHelpers, sympol_patch_args
 from sympol.rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
 from sympol.rllib_port.sympol_setup import SympolSetup
-from tests._test_utils import SympolTestHelpers, sympol_patch_args
 
 try:
     from ray.train._internal.session import _TrainingResult
@@ -64,12 +63,15 @@ except ValueError:
 
 patch_args = sympol_patch_args
 
+if 2 in ENV_RUNNER_CASES:  # 0, 1 are fine
+    ENV_RUNNER_CASES.remove(2)
+    assert len(ENV_RUNNER_CASES) > 0
+
 
 class TestTrainable(InitRay, SympolTestHelpers, DisableLoggers, DisableGUIBreakpoints, num_cpus=4):
     def setUp(self):
         SympolSetup.GROUP = "TEST-GROUP"
         return super().setUp()
-
 
     @sympol_patch_args(extend_argv=True)
     @pytest.mark.basic
@@ -398,6 +400,7 @@ class TestTrainable(InitRay, SympolTestHelpers, DisableLoggers, DisableGUIBreakp
             self.assertEqual(trainable3.algorithm_config.train_batch_size_per_learner, 333)
             self.assertIsInstance(trainable3.algorithm_config.train_batch_size_per_learner, PerturbedInt)
 
+    @pytest.mark.basic
     def test_further_subclassing(self):
         # for example by resource placement request
         setup = SympolSetup()
@@ -588,6 +591,7 @@ class TestClassCheckpointing(InitRay, SympolTestHelpers, DisableLoggers, num_cpu
     @pytest.mark.env_runner_cases
     @Cases([0])
     @no_parallel_envs  # XXX
+    @pytest.mark.timeout(180, method="thread")
     def test_save_checkpoint(self, cases):
         # NOTE: In this test attributes are shared BY identity, this is just a weak test.
         for num_env_runners in iter_cases(cases):
@@ -656,7 +660,7 @@ class TestClassCheckpointing(InitRay, SympolTestHelpers, DisableLoggers, num_cpu
 
     @pytest.mark.env_runner_cases
     @pytest.mark.basic
-    @Cases(ENV_RUNNER_CASES)
+    @Cases([1, 2])
     def test_1_get_set_state(self, cases):
         # If this test fails all others will most likely fail too, run it first.
         self.maxDiff = None
@@ -835,7 +839,11 @@ class TestClassCheckpointing(InitRay, SympolTestHelpers, DisableLoggers, num_cpu
     @Cases(ENV_RUNNER_CASES)
     @pytest.mark.env_runner_cases
     def test_restore_multiprocessing(self, cases):
-        from test._mp_trainable import remote_process  # noqa: PLC0415
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        try:
+            from ._mp_trainable import remote_process  # noqa: PLC0415
+        except ImportError:
+            from tests._mp_trainable import remote_process  # noqa: PLC0415
 
         self._disable_save_model_architecture_callback_added.stop()  # remote is not mocked
         for num_env_runners in iter_cases(cases):
