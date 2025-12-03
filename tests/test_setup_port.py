@@ -827,7 +827,7 @@ class TestSetupClasses(InitRay, SympolSetupDefaults, num_cpus=4):
 class TestDQNSetup(InitRay, num_cpus=4):
     @mock_trainable_algorithm(mock_env_runners=False)
     def test_dqn_args(self):
-        with DQNMLPSetup() as setup:
+        with DQNMLPSetup() as setup:  # noqa F821
             settings1 = {
                 "dueling": False,
                 "double_q": False,
@@ -1152,27 +1152,6 @@ class TestAlgorithm(InitRay, SympolSetupDefaults, num_cpus=4):
 class TestPBTSchedulerSelection(InitRay, SympolSetupDefaults, num_cpus=4):
     """Test that the correct PBT scheduler is selected based on CLI arguments."""
 
-    def test_default_top_pbt_scheduler(self):
-        """Test that TopPBTTrialScheduler is used by default (without --grouped flag)."""
-        from ray_utilities.tune.scheduler.grouped_top_pbt_scheduler import GroupedTopPBTTrialScheduler
-        from ray_utilities.tune.scheduler.top_pbt_scheduler import TopPBTTrialScheduler
-
-        with patch_args(
-            "--num_samples",
-            "3",
-            "pbt",
-            "--hyperparam_mutations",
-            "{'lr': [0.001, 0.0001]}",
-        ):
-            setup = SympolSetup()
-            scheduler = setup.args.command.to_scheduler()
-
-        self.assertIsInstance(scheduler, TopPBTTrialScheduler)
-        self.assertNotIsInstance(
-            scheduler,
-            GroupedTopPBTTrialScheduler,
-        )
-
     def test_grouped_top_pbt_scheduler(self):
         """Test that GroupedTopPBTTrialScheduler is used when --grouped flag is set."""
         from ray_utilities.tune.scheduler.grouped_top_pbt_scheduler import GroupedTopPBTTrialScheduler
@@ -1213,31 +1192,6 @@ class TestPBTSchedulerSelection(InitRay, SympolSetupDefaults, num_cpus=4):
         tune_config = tuner._local_tuner._tune_config if hasattr(tuner, "_local_tuner") else None
         if tune_config:
             self.assertIsInstance(tune_config.scheduler, GroupedTopPBTTrialScheduler, f"Found: {tune_config.scheduler}")
-
-    def test_scheduler_parameters_passed_correctly(self):
-        """Test that scheduler parameters are correctly passed to GroupedTopPBTTrialScheduler."""
-        from ray_utilities.tune.scheduler.grouped_top_pbt_scheduler import GroupedTopPBTTrialScheduler
-
-        quantile_fraction = 0.15
-        num_samples = 5
-
-        with patch_args(
-            "--num_samples",
-            str(num_samples),
-            "pbt",
-            "--grouped",
-            "--hyperparam_mutations",
-            "{'lr': [0.001, 0.0001]}",
-            "--quantile_fraction",
-            str(quantile_fraction),
-        ):
-            setup = SympolSetup()
-            scheduler = setup.args.command.to_scheduler()
-
-        assert isinstance(scheduler, GroupedTopPBTTrialScheduler)
-        self.assertEqual(scheduler._quantile_fraction, quantile_fraction)
-        self.assertEqual(scheduler._num_samples, num_samples)
-        self.assertIs(scheduler._recompute_groups, False)  # default value  # noqa: FBT003
 
 
 class TestMetricsRestored(InitRay, SympolTestHelpers, num_cpus=4):

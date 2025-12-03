@@ -36,26 +36,26 @@
 </div>
 
 ### Key Innovations:
-✅ Efficient learning of axis-aligned decision trees on-policy  
-✅ Enhanced training stability through a dynamic rollout buffer and batch size  
-✅ Weight decay to support dynamic adjustment of tree architecture  
-✅ Separate actor-critic network architecture, where the critic captures complexity, and the actor ensures interpretability  
+✅ Efficient learning of axis-aligned decision trees on-policy
+✅ Enhanced training stability through a dynamic rollout buffer and batch size
+✅ Weight decay to support dynamic adjustment of tree architecture
+✅ Separate actor-critic network architecture, where the critic captures complexity, and the actor ensures interpretability
 
 ### Why is SYMPOL different?
-✔️ No need for pre-trained neural networks  
-✔️ No complex custom search procedures  
-✔️ No post-processing  
-✔️ No information loss  
+✔️ No need for pre-trained neural networks
+✔️ No complex custom search procedures
+✔️ No post-processing
+✔️ No information loss
 
 ➡️ **SYMPOL guarantees that the learned policy remains consistent from training to inference.**
 
-### Performance? 
+### Performance?
 🚀 **SYMPOL outperforms existing tree-based RL approaches and provides human-understandable explanations for every decision made.**
 
-### Curious to explore more? 
+### Curious to explore more?
 📝 Read our detailed preprint on arXiv: [https://arxiv.org/abs/2408.08761](https://arxiv.org/abs/2408.08761)
 
-💬 We’d love to hear your thoughts—feedback is always welcome!  
+💬 We’d love to hear your thoughts—feedback is always welcome!
 You can contact me at [sascha.marton@uni-mannheim.de](mailto:sascha.marton@uni-mannheim.de)
 
 ### Cite us
@@ -96,7 +96,7 @@ If you do not have matching cuda distributions for JAX, this might significantly
 ```bash
 conda install cuda=12.6 -c nvidia
 ```
- 
+
 
 ### Running the Script
 
@@ -128,7 +128,7 @@ If you want to optimize a range of hyperparameters, first note that the range of
 python ppo --env_id CartPole-v1 --optimize_config --track
 ```
 
-I recommend using the --track flag, so each run gets logged in wandb. This will allow you to find easily the best config after the optuna study in the wandb user interface. 
+I recommend using the --track flag, so each run gets logged in wandb. This will allow you to find easily the best config after the optuna study in the wandb user interface.
 However, if you decide to track your experiments using optuna, keep in mind you can only run 1 job when creating the study (see line 430)
 
 ```python
@@ -147,4 +147,3 @@ Hide the session, and open another one and run the same argument again as often 
 Now you are running jobs in parallel, and optuna also shares their trials' results between each job. This is also what the `hpopt.db` file is good for in the directory (if it is not there yet, it will be created as soon as optuna is run the first time). This file is created by optuna to save information about individual trials.
 
 Alternatively, you can also use the `run_ppo.sh` script for parallelization of the HPO.
-

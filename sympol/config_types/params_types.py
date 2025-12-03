@@ -109,7 +109,7 @@ class SympolCatalogOptions(SYMPOLModelArgsDict, SDTModelArgsDict, MLPModelArgsDi
     learning_rate_critic: float
     seed: int
     grad_clip: float | None
-    #lr: float  - # not yet used!
+    # lr: float  - # not yet used!
 
 
 class SDTArgsDict(SDTModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):

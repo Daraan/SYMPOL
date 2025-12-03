@@ -98,7 +98,7 @@ select = [
   "PD",  # Pandas
   "NPY",  # numpy
   # -- Pylint --
-  "PLW", 
+  "PLW",
   "PLE",
   "PLC",
   "PLR",

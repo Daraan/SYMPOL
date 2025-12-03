@@ -19,6 +19,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+          persist-credentials: false
     - name: Python setup and install
       uses: ./.github/actions/cached-python-setup
       with:
@@ -34,6 +36,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+          persist-credentials: false
     - name: Python setup and install
       uses: ./.github/actions/cached-python-setup
       with:
@@ -54,6 +58,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+          persist-credentials: false
     - name: Python setup and install
       uses: ./.github/actions/cached-python-setup
       with:

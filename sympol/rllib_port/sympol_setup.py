@@ -233,7 +233,7 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
     def create_param_space(self, trial=None) -> dict[str, Any]:
         # FIXME use tune
         param_space_for_tune = super().create_param_space()
-        param_space_for_tune["run_seed"] = tune.randint(0, 2**16)
+        param_space_for_tune["env_seed"] = tune.randint(0, 2**16)
         if not trial:
             return param_space_for_tune
         args = self.args
