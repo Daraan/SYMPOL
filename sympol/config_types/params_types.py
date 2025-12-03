@@ -108,6 +108,7 @@ class SympolCatalogOptions(SYMPOLModelArgsDict, SDTModelArgsDict, MLPModelArgsDi
     actor: Literal["sympol", "mlp", "sdt", "d-sdt", "stateActionDT"] | str  # noqa: PYI051
     learning_rate_critic: float
     seed: int
+    grad_clip: float | None
 
 
 class SDTArgsDict(SDTModelArgsDict, PPOArgsDict, ArgsDict, GeneralArgsDict):
@@ -132,6 +133,7 @@ class GeneralParams(TypedDict):
     minibatch_size: int
     n_update_epochs: int
     max_grad_norm: float | None
+    """deprecated use grad_clip"""
     norm_adv: bool
     ent_coef: float
     vf_coef: float

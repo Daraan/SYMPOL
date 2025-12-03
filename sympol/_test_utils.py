@@ -166,7 +166,7 @@ def sympol_patch_args(*args, **kwargs):
     return _patch_args("--agent_type", "sympol", *args, **kwargs)
 
 
-args_train_no_tuner = sympol_patch_args("--no-render_env", "-J", "1", "-it", "2", "-np")
+args_train_no_tuner = sympol_patch_args("-J", "1", "-it", "2", "-np")
 clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
 

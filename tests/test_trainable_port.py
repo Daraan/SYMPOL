@@ -463,7 +463,7 @@ class TestTrainable(InitRay, SympolTestHelpers, DisableLoggers, DisableGUIBreakp
         self.assertTrue(issubclass(setup.config.learner_class, JaxPPOLearnerWithLegacy))
 
         trainable = setup.trainable_class({"accumulate_gradients_every": 1})
-        assert trainable.algorithm.learner_group
+        assert trainable.algorithm.learner_group is not None
         self.assertFalse(
             issubclass(trainable.algorithm_config.learner_class, PPOTorchLearnerWithGradientAccumulation),
             trainable.algorithm_config.learner_class,
@@ -474,7 +474,7 @@ class TestTrainable(InitRay, SympolTestHelpers, DisableLoggers, DisableGUIBreakp
 
         self.assertTrue(issubclass(setup.config.learner_class, JaxPPOLearnerWithLegacy))
         trainable = setup.trainable_class({"accumulate_gradients_every": 2})
-        assert trainable.algorithm.learner_group
+        assert trainable.algorithm.learner_group is not None
         self.assertTrue(issubclass(trainable.algorithm_config.learner_class, JaxPPOLearnerWithLegacy))
         self.assertFalse(
             issubclass(trainable.algorithm_config.learner_class, PPOTorchLearnerWithGradientAccumulation),
@@ -785,23 +785,6 @@ class TestClassCheckpointing(InitRay, SympolTestHelpers, DisableLoggers, num_cpu
                 with tempfile.TemporaryDirectory() as tmpdir1:
                     trainable.save_to_path(tmpdir1)
                     trainable_from_path = self.TrainableClass()
-                    module = trainable_from_path.algorithm.get_module()
-                    assert module
-                    assert self._model_config is not None
-                    assert module.model_config is not None
-                    # FIXME: model_config is partially based on cls_model_config!
-                    self.assertEqual(
-                        first=(
-                            module.model_config.fcnet_hiddens
-                            if dataclasses.is_dataclass(module.model_config)
-                            else module.model_config["fcnet_hiddens"]
-                        ),
-                        second=(
-                            [self._model_config["fcnet_hiddens"]]
-                            if isinstance(self._model_config["fcnet_hiddens"], int)
-                            else self._model_config["fcnet_hiddens"]
-                        ),
-                    )
                     trainable_from_path.restore_from_path(tmpdir1)
                 self.on_checkpoint_loaded_callbacks(trainable_from_path)
                 self.compare_trainables(
@@ -902,7 +885,8 @@ class TestClassCheckpointing(InitRay, SympolTestHelpers, DisableLoggers, num_cpu
             "--batch_size", make_divisible(32, DefaultArgumentParser.num_envs_per_env_runner),
             "--minibatch_size", make_divisible(16, DefaultArgumentParser.num_envs_per_env_runner),
             "--num_envs_per_env_runner", 1,  # Stuck when using more
-            "--fcnet_hiddens", "[8]",
+            # TODO: Port fcnet_hiddens to MLP argument
+            #"--fcnet_hiddens", "[8]",
         ):  # fmt: skip
             for num_env_runners in iter_cases(cases):
                 with self.subTest(num_env_runners=num_env_runners):

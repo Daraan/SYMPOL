@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Literal, Optional
 
-from typing_extensions import TypeGuard
+from typing_extensions import TypeGuard, deprecated
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -132,13 +132,17 @@ class PPOArgs(_HandleNos):
     Number of accumulation steps for the gradient update.
     The accumulated gradients will be averaged before backpropagation
     """
-    max_grad_norm: float = 0.5
-    """Gradient clipping threshold"""
+
     target_kl: Optional[float] = None
     """Target KL divergence threshold"""
     norm_adv: bool = False
     """If true, Normalize the advantages"""
 
+    grad_clip: float | None = 0.5
+    """Gradient clipping value"""
+
+    max_grad_norm:  float | None = 0.5
+    """Deprecated: Use grad_clip instead."""
 
 @dataclass(kw_only=True)
 class ActorLearningRateSimple(_HandleNos):
@@ -219,6 +223,9 @@ class SYMPOLArgs(SYMPOLModelArgs, PPOArgs, Args, GeneralArgs):
 @dataclass(kw_only=True, eq=True, unsafe_hash=True)
 class SympolCLIArgs(SYMPOLArgs, MLPArgs, SDTArgs):
     """Arguments for the command line interface"""
+
+    grad_clip: float | None
+    """New key for max_grad_norm"""
 
 
 def is_sympol_args(args: SympolCLIArgs) -> TypeGuard[SYMPOLArgs]:

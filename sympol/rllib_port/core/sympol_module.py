@@ -224,10 +224,14 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                     assert not hasattr(self, "vf") or self.vf.config == self.vf.config | self.model_config
             # TODO need to updates models
         super().set_state(state)
+        jax_state = state["jax_state"].copy()
+        jax_state.setdefault(ACTOR, None) # pyright: ignore[reportArgumentType, reportCallIssue]
+        jax_state.setdefault(CRITIC, None) # pyright: ignore[reportArgumentType, reportCallIssue]
+        self.update_state(**jax_state) # pyright: ignore[reportArgumentType]
 
     # region non-rllib interface
 
-    def update_state(self, *, actor: Optional[ActorTrainState], critic: Optional[TrainState]):
+    def update_state(self, *, actor: Optional[ActorTrainState], critic: Optional[TrainState], **kwargs):
         """Update the actor and critic states."""
         if actor:
             self.states[ACTOR] = actor
