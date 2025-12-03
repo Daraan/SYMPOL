@@ -16,6 +16,7 @@ from ray_utilities import DefaultTrainable
 from ray_utilities.testing_utils import (
     _NOT_PROVIDED,
     DisableGUIBreakpoints,
+    SetupWithEnv,
     TestHelpers,
     get_explicit_required_keys,
     get_explicit_unrequired_keys,
@@ -171,9 +172,10 @@ clean_args = mock.patch.object(sys, "argv", ["file.py"])
 """Use when comparing to CLIArgs"""
 
 
-class SympolSetupDefaults(_SetupDefaults):
-    def setUp(self):
-        super().setUp()
+class SympolSetupDefaults(_SetupDefaults, SympolTestHelpers):
+    def setUp(self, setup_class=SympolSetup, *, empty_args=False):
+        with _patch_args("--agent_type", "sympol"):
+            super().setUp(setup_class=setup_class, empty_args=empty_args)
         print("Remember to enable/disable justMyCode('\"debugpy.debugJustMyCode\": false,') in the settings")
         env = gym.make("CartPole-v1")
 

@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from typing_extensions import TypeGuard, deprecated
 
+from ray_utilities.config.parser.default_argument_parser import AlwaysRestore
+
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
@@ -37,7 +39,7 @@ class GeneralArgs(_HandleNos):
     """If true, initialize a wandb run and track the results"""
     seed: int = 42
     """Random seed"""
-    env_id: str = "CartPole-v1"
+    env_id: AlwaysRestore[str] = "CartPole-v1"
     """Environment ID"""
     total_steps: int = 1_179_648
     """Number of total environment steps for training. If more than one environment is used, e.g. 5 environments, we have 5 total steps per env.step() call"""
@@ -141,8 +143,9 @@ class PPOArgs(_HandleNos):
     grad_clip: float | None = 0.5
     """Gradient clipping value"""
 
-    max_grad_norm:  float | None = 0.5
+    max_grad_norm: float | None = 0.5
     """Deprecated: Use grad_clip instead."""
+
 
 @dataclass(kw_only=True)
 class ActorLearningRateSimple(_HandleNos):
@@ -155,9 +158,9 @@ class ActorLearningRateSimple(_HandleNos):
 class MLPModelArgs(ActorLearningRateSimple):
     """Arguments specific to the MLP algorithm."""
 
-    num_layers: int = 2
+    num_layers: AlwaysRestore[int] = 2
     """Number of MLP layers"""
-    neurons_per_layer: int = 256
+    neurons_per_layer: AlwaysRestore[int] = 256
     """Number of neurons per MLP layer"""
 
 
@@ -165,12 +168,12 @@ class MLPModelArgs(ActorLearningRateSimple):
 class SDTModelArgs(ActorLearningRateSimple):
     """Arguments specific to the SDT algorithm."""
 
-    depth: int = 7
+    depth: AlwaysRestore[int] = 7
     """Depth for each single estimator/tree"""
     temperature: float = 1.0
     "SDT entmax temperature"
 
-    action_type: Literal["discrete", "continuous"] = "discrete"
+    action_type: AlwaysRestore[Literal["discrete", "continuous"]] = "discrete"
     """
     Type of the action space, i.e. discrete or continuous (classification vs regression).
     Continuous actions are not properly implemented yet though and will raise an NotImplementedException.
@@ -181,11 +184,11 @@ class SDTModelArgs(ActorLearningRateSimple):
 class SYMPOLModelArgs(_HandleNos):
     """Arguments specific to the SYMPOL algorithm."""
 
-    depth: int = 7
+    depth: AlwaysRestore[int] = 7
     """Depth for each single estimator/tree"""
-    n_estimators: int = 1
+    n_estimators: AlwaysRestore[int] = 1
     """Number of estimators/trees for the ensemble"""
-    action_type: Literal["discrete", "continuous"] = "discrete"
+    action_type: AlwaysRestore[Literal["discrete", "continuous"]] = "discrete"
     """
     Type of the action space, i.e. discrete or continuous (classification vs regression).
     Continuous actions are not properly implemented yet though and will raise an NotImplementedException.
@@ -224,7 +227,7 @@ class SYMPOLArgs(SYMPOLModelArgs, PPOArgs, Args, GeneralArgs):
 class SympolCLIArgs(SYMPOLArgs, MLPArgs, SDTArgs):
     """Arguments for the command line interface"""
 
-    grad_clip: float | None
+    grad_clip: float | None = 0.5
     """New key for max_grad_norm"""
 
 

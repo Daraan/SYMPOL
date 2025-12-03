@@ -20,6 +20,7 @@ from ray_utilities.learners.leaner_with_debug_connector import LearnerWithDebugC
 from ray_utilities.setup.algorithm_setup import AlgorithmSetup
 from sympol import configs
 from sympol.config_types.params_types import SympolCatalogOptions
+from sympol.rllib_port.core.algorithms import SympolPPOConfig
 from sympol.rllib_port.core.jax_learner import JaxPPOLearnerWithLegacy
 from sympol.rllib_port.core.sympol_catalog import SympolJaxPPOCatalog
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
@@ -34,10 +35,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SympolSetup(AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]):
+class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
     PROJECT = "SYMPOL"
 
     GROUP = "NO_GROUP_SET"
+
+    config_class = SympolPPOConfig
+    # Takes care config attributes -> model_config dict
 
     # @property
     # def group_name(self) -> str:
@@ -60,7 +64,7 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]):
         return model_identifier
 
     def create_parser(self, config_files=None):
-        self.parser = SympolArgumentParser()
+        self.parser = SympolArgumentParser(allow_abbrev=False, config_files=config_files)
         return self.parser
 
     @staticmethod
@@ -128,16 +132,24 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]):
     def _config_from_args(cls, args, base=None):
         all_data = args.as_dict() if hasattr(args, "as_dict") else vars(args).copy()
         all_data = {k: v for k, v in all_data.items() if not ismethod(v)}
+        config_class, _ = cls.get_algorithm_classes(args)
+        model_config_base = cls._model_config_from_args(args) or {}
+        # Remove auto includes
+        for k in config_class()._model_config_auto_includes.keys():
+            model_config_base.pop(k, None)
+        if not model_config_base:
+            model_config_base = None
         config, _spec = create_algorithm_config(
             args,
             env_type=args.env_type,
             module_class=SympolPPOModule,
             catalog_class=SympolJaxPPOCatalog,
             # WTF we we store all data in here?
-            model_config=cls._model_config_from_args(args) or None,
+            model_config=model_config_base,
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
             base_config=base,
+            config_class=config_class,
         )
         add_callbacks_to_config(config, cls.get_callbacks_from_args(args))
         # NOTE: Incomplete automcompletion kwargs -> super()
@@ -216,7 +228,7 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, PPOConfig, PPO]):
     def get_algorithm_classes(cls, args):
         if args.algorithm == "dqn":
             raise NotImplementedError("DQN not implemented for SYMPOL yet")
-        return PPOConfig, PPO
+        return SympolPPOConfig, PPO
 
     def create_param_space(self, trial=None) -> dict[str, Any]:
         # FIXME use tune

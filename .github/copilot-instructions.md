@@ -122,3 +122,8 @@ if __name__ == "__main__":
 
 - **Don't modify config after `with setup:` block** - changes won't be tracked for checkpoint restoration
 - **Don't call `run_in_terminal` for Python execution** - use `mcp_pylance_mcp_s_pylanceRunCodeSnippet` for cleaner output
+
+
+# Testing and Agent behavior
+
+When you open a console always run "source ../env/bin/activate" first to activate the virtual environment.

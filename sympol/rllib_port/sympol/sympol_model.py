@@ -47,6 +47,13 @@ class SympolRLModel(JaxRLModel):
         )
         assert self.config == config
 
+    def __repr__(self):
+        return f"""{self.__class__.__name__}(
+    config={self.config},
+    model={self.model!r}
+    )
+    """
+
     def init_state(
         self: Self | PureJaxModelProtocol,
         rng: chex.PRNGKey,

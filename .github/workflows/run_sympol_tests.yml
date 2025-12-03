@@ -64,7 +64,7 @@ jobs:
     - name: Test Integration (mp-only)
       run: |
         source .venv/bin/activate
-        pytest -kv -k "test_trainable_port and not test_tuner_checkpointingand not test_fork_from_restore and not test_validate_save_restore" --timeout=600 --mp-only
+        pytest -kv -k "test_trainable_port and not test_tuner_checkpointing and not test_fork_from_restore and not test_validate_save_restore" --timeout=600 --mp-only
     - name: Test Tuner Checkpointing (mp)
       run: |
         source .venv/bin/activate

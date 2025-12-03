@@ -213,9 +213,12 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                     # self.pi.config = self.pi.config.update(self.model_config)
                     # should rebuild it entirely
                     build_new = True
-                if hasattr(self, "vf") and self.vf.config != self.vf.config | self.model_config:
-                    logger.info("Updating vf model config in set_state")
-                    build_new = True
+                if hasattr(self, "vf"):
+                    if self.vf.config != self.vf.config | self.model_config:
+                        logger.info("Updating vf model config in set_state")
+                        build_new = True
+                else:
+                    assert self.inference_only
                 if build_new:
                     # setup catalog just to be sure
                     self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
@@ -225,13 +228,13 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
             # TODO need to updates models
         super().set_state(state)
         jax_state = state["jax_state"].copy()
-        jax_state.setdefault(ACTOR, None) # pyright: ignore[reportArgumentType, reportCallIssue]
-        jax_state.setdefault(CRITIC, None) # pyright: ignore[reportArgumentType, reportCallIssue]
-        self.update_state(**jax_state) # pyright: ignore[reportArgumentType]
+        jax_state.setdefault(ACTOR, None)  # pyright: ignore[reportArgumentType, reportCallIssue]
+        jax_state.setdefault(CRITIC, None)  # pyright: ignore[reportArgumentType, reportCallIssue]
+        self.update_jax_state(**jax_state)  # pyright: ignore[reportArgumentType]
 
     # region non-rllib interface
 
-    def update_state(self, *, actor: Optional[ActorTrainState], critic: Optional[TrainState], **kwargs):
+    def update_jax_state(self, *, actor: Optional[ActorTrainState], critic: Optional[TrainState], **kwargs):
         """Update the actor and critic states."""
         if actor:
             self.states[ACTOR] = actor

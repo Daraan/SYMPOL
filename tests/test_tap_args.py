@@ -289,7 +289,9 @@ class TestArgContents(unittest.TestCase):
                 self.assertIn(getattr(dc, attr), [50000, 65536], "eval_freq in CLIArgs is not expected value")
             elif attr == "total_steps":
                 # Accept both 1000000 and 1179648 for total_steps due to legacy vs new default
-                self.assertIn(getattr(old_args, attr), [1000000, 1179648], "total_steps in old_args is not expected value")
+                self.assertIn(
+                    getattr(old_args, attr), [1000000, 1179648], "total_steps in old_args is not expected value"
+                )
                 self.assertIn(getattr(dc, attr), [1000000, 1179648], "total_steps in CLIArgs is not expected value")
             elif attr in ("max_grad_norm", "grad_clip"):
                 continue
@@ -356,11 +358,17 @@ class TestArgContents(unittest.TestCase):
             if field.default is not None and field.default != field.default_factory:
                 if field.name == "render_env":
                     # Accept both True and False for render_env due to parser/class default mismatch
-                    self.assertIn(getattr(args, field.name), [True, False], f"Default value for {field.name} not set correctly.")
+                    self.assertIn(
+                        getattr(args, field.name), [True, False], f"Default value for {field.name} not set correctly."
+                    )
                 elif field.default == "auto":
-                    self.assertNotEqual(getattr(args, field.name), "auto", f"'auto' value for {field.name} is still 'auto'.")
+                    self.assertNotEqual(
+                        getattr(args, field.name), "auto", f"'auto' value for {field.name} is still 'auto'."
+                    )
                 else:
-                    self.assertEqual(getattr(args, field.name), field.default, f"Default value for {field.name} not set correctly.")
+                    self.assertEqual(
+                        getattr(args, field.name), field.default, f"Default value for {field.name} not set correctly."
+                    )
             else:
                 self.assertIsNone(getattr(args, field.name), f"Default value for {field.name} should be None.")
 

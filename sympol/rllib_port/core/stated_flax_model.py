@@ -50,7 +50,9 @@ class StatedActorFlaxRLModel(FlaxRLModel[ModelType, _ConfigType]):
         gradient_transformations = []
         if grad_clip is not None:
             gradient_transformations.append(optax.clip_by_global_norm(grad_clip))
-        gradient_transformations.append(optax.inject_hyperparams(optimizer_cls)(config["learning_rate_actor"]))
+        gradient_transformations.append(
+            optax.inject_hyperparams(optimizer_cls)(config.get("learning_rate_actor", config.get("lr")))
+        )
         actor_state = ActorTrainState.create(
             apply_fn=None,
             params=self.model.init(actor_key, jnp.array([sample])),

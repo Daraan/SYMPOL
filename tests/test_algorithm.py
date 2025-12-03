@@ -1,10 +1,13 @@
 from typing import TYPE_CHECKING, cast
 
 import gymnasium as gym
+import numpy as np
 import pytest
+from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 
 from ray_utilities.testing_utils import patch_args
-from sympol._test_utils import SympolSetupDefaults, get_leafpath_value
+from sympol._test_utils import SympolSetupDefaults
+from sympol.rllib_port.core.algorithms import SympolPPOConfig
 from sympol.rllib_port.core.sympol_module import SympolPPOModule
 from sympol.rllib_port.sympol.sympol_model import SympolRLModel
 from sympol.rllib_port.sympol_setup import SympolSetup
@@ -53,6 +56,11 @@ class AlgorithmTests(SympolSetupDefaults):
         self._RL_MODULE_SPEC = self._ALGORITHM_CONFIG.get_rl_module_spec(self._ENV)
         self._RL_MODULE = self._RL_MODULE_SPEC.build()
         self.assertEqual(self._RL_MODULE_SPEC.module_class, SympolPPOModule)
+
+    @pytest.mark.basic
+    def test_setup_config_class(self):
+        setup = SympolSetup(init_param_space=False, init_trainable=False)
+        self.assertIsInstance(setup.config, SympolPPOConfig)
 
     def test_algorithm_build_units(self):
         with patch_args("--agent_type", "sympol"):
@@ -182,19 +190,23 @@ class AlgorithmTests(SympolSetupDefaults):
         actor_state2 = model.init_state(self._ACTOR_KEY, self._ENV_SAMPLE)
         out = model({"obs": self._DEFAULT_INPUT}, parameters=actor_state2.params, indices=actor_state2.indices)
 
-        from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
-        from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
-        from ray.rllib.env.single_agent_episode import SingleAgentEpisode
+        # Convert to list to avoid ambiguous truth value error with JAX/numpy arrays
+        episodes = [SingleAgentEpisode(observations=self._DEFAULT_INPUT.tolist())]
+        batch = {
+            "default_policy": {"action_dist_inputs": out, "actions": np.array([1])},
+            "actions": np.array([1]),
+        }
 
-        episodes = [SingleAgentEpisode(observations=self._DEFAULT_INPUT)]
-        import numpy as np
-
-        module_to_env(
-            rl_module=self._RL_MODULE.as_multi_rl_module(),  # self._RL_MODULE,
-            batch={"default_policy": {"action_dist_inputs": out, "actions": np.array([1])}, "actions": np.array([1])},
-            episodes=episodes,
-            explore=False,
-        )
+        # Should not raise
+        try:
+            _result = module_to_env(
+                rl_module=self._RL_MODULE.as_multi_rl_module(),
+                batch=batch,
+                episodes=episodes,
+                explore=False,
+            )
+        except Exception as e:  # noqa: BLE001
+            pytest.fail(f"module_to_env raised an exception in test setup: {e}")
 
     def test_env_to_module(self):
         env_to_module: EnvToModulePipeline = self._ALGORITHM_CONFIG.build_env_to_module_connector(self._ENV)
@@ -204,3 +216,17 @@ class AlgorithmTests(SympolSetupDefaults):
         learner_connector = self._ALGORITHM_CONFIG.build_learner_connector(self._OBSERVATION_SPACE, self._ACTION_SPACE)
         # no batch
         _no_out = learner_connector(rl_module=self._RL_MODULE.as_multi_rl_module(), episodes=[])
+
+    def test_sympol_algorithm_auto_includes(self):
+        config = SympolSetup().config
+        auto_includes = config._model_config_auto_includes
+
+        self.assertIsInstance(auto_includes, dict)
+        self.assertIn("grad_clip", auto_includes)
+        self.assertIn("vf_share_layers", auto_includes)  # from PPO
+        self.assertIn("lr", auto_includes)  # from PPO
+
+        model_config = config.model_config
+        self.assertIn("grad_clip", model_config)
+        self.assertIn("vf_share_layers", model_config)
+        self.assertIn("lr", model_config)
