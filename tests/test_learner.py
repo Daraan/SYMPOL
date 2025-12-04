@@ -73,7 +73,7 @@ class TestSympolLearner(SympolSetupDefaults):
                 msg=f"Step 0 grad_accum should be zero for {key}",
             )
             # Step 1 should not be zeros anymore
-            with self.assertRaisesRegex(AssertionError, "Max relative difference: inf"):
+            with self.assertRaisesRegex(AssertionError, r"Max relative difference\s*(among violations)?\s*: inf"):
                 self.util_test_tree_equivalence(
                     states_step1[key].grad_accum,
                     jax.tree_util.tree_map(jax.numpy.zeros_like, states_step1[key].grad_accum),
