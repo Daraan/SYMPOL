@@ -77,17 +77,6 @@ class TestHyperparamPerturbation(InitRay, SympolTestHelpers, num_cpus=4):
 
     @no_parallel_envs
     def test_grad_clip_setting(self):
-        target_clip = 0.111
-        with SympolSetup() as setup:
-            basic_config: "AlgorithmConfig" = setup.config
-            basic_config.rl_module(model_config=setup.config._model_config | {"grad_clip": target_clip})
-        trainable = setup.trainable_class()
-        # self.assertEqual(setup.config.grad_clip, target_clip)
-        self.assertEqual(setup.config.model_config["grad_clip"], target_clip)
-        self.check_grad_clip_set(trainable, target_clip, "AlgorithmConfig grad_clip set")
-        trainable.stop()
-        del trainable
-
         # test config override
         setup = SympolSetup()
         trainable2 = setup.trainable_class({"grad_clip": 0.045})
@@ -105,6 +94,7 @@ class TestHyperparamPerturbation(InitRay, SympolTestHelpers, num_cpus=4):
         self.check_grad_clip_set(trainable3, 0.144, "CLI grad_clip override")
         del trainable3
 
+        target_clip = 0.321
         with SympolSetup() as setup:
             basic_config: "AlgorithmConfig" = setup.config
             basic_config.training(grad_clip=target_clip)

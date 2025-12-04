@@ -4,49 +4,40 @@ import logging
 import os
 import pickle
 import random
-import signal
 import sys
 import tempfile
-import threading
 import time
-import unittest
 from collections.abc import Iterable
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest import mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import optax
 import pytest
 from ray import tune
+from ray.rllib.algorithms.ppo import PPO
 from ray.rllib.utils.metrics import (
     ENV_RUNNER_RESULTS,
     EPISODE_RETURN_MEAN,
     EVALUATION_RESULTS,
     NUM_ENV_STEPS_SAMPLED_LIFETIME,
 )
-from ray.rllib.utils.typing import StateDict
 from ray.train._internal.storage import StorageContext
 from ray.tune import CheckpointConfig
-from ray.tune.execution.tune_controller import TuneController
 from ray.tune.experiment import Trial
 from ray.tune.result import (
     SHOULD_CHECKPOINT,
     TRAINING_ITERATION,  # pyright: ignore[reportPrivateImportUsage]
 )
-from ray.tune.schedulers.pbt import PopulationBasedTraining
 from ray.tune.schedulers.pbt import logger as ray_pbt_logger
 from ray.tune.stopper.maximum_iteration import MaximumIterationStopper
-from ray.tune.utils.mock_trainable import MOCK_TRAINABLE_NAME, register_mock_trainable  # noqa: PLC0415
 
 from ray_utilities.callbacks.algorithm import exact_sampling_callback
 from ray_utilities.config import DefaultArgumentParser
 from ray_utilities.constants import (
-    CURRENT_STEP,
     EPISODE_RETURN_MEAN_EMA,
     EVAL_METRIC_RETURN_MEAN,
-    EVAL_METRIC_RETURN_MEAN_EMA,
     NUM_ENV_STEPS_PASSED_TO_LEARNER,
     NUM_ENV_STEPS_PASSED_TO_LEARNER_LIFETIME,
 )
@@ -65,7 +56,6 @@ from ray_utilities.testing_utils import (
     format_result_errors,
     iter_cases,
     mock_result,
-    training_step,
 )
 from ray_utilities.training.default_class import DefaultTrainable
 from ray_utilities.training.helpers import make_divisible
@@ -77,6 +67,7 @@ from sympol.rllib_port.core.algorithms import SympolPPOConfig
 from sympol.rllib_port.core.sympol_pbt_setup import SympolPBTSetup
 
 if TYPE_CHECKING:
+    from ray.tune.execution.tune_controller import TuneController
     from ray.rllib.algorithms.ppo import PPO
 
     from ray_utilities.typing.algorithm_return import StrictAlgorithmReturnData
@@ -229,7 +220,7 @@ class TestReTuning(InitRay, SympolTestHelpers, DisableLoggers, num_cpus=4):
                     f"Expected {expected_lifetime} env steps passed to learner lifetime, got {value}"
                 )
 
-        Setup = SetupWithCheck(TrainableWithChecksA)
+        Setup = SetupWithCheck(TrainableWithChecksA, SympolSetup)
 
         for num_env_runners in iter_cases(cases):
             with self.subTest(num_env_runners=num_env_runners):
@@ -369,7 +360,7 @@ class TestReTuning(InitRay, SympolTestHelpers, DisableLoggers, num_cpus=4):
         class TrainableWithChecksB(TrainableWithChecks):
             debug_step = False
 
-        Setup = SetupWithCheck(TrainableWithChecksB)
+        Setup = SetupWithCheck(TrainableWithChecksB, SympolSetup)
 
         for num_env_runners in iter_cases(cases):
             with self.subTest(num_env_runners=num_env_runners):

@@ -1895,6 +1895,7 @@ class TestMetricsRestored(InitRay, SympolTestHelpers, num_cpus=4):
         for num_env_runners in iter_cases(cases):
             # Use multiple envs per env runner to speed up test
             num_envs_per_env_runner = 4
+            seed_everything(None, 0)
             with patch_args(
                 "--batch_size", make_divisible(ENV_STEPS_PER_ITERATION, num_envs_per_env_runner),
                 "--minibatch_size", (
@@ -1931,6 +1932,7 @@ class TestMetricsRestored(InitRay, SympolTestHelpers, num_cpus=4):
             trainable1.train()
             del setup
 
+            seed_everything(None, 0)
             with tempfile.TemporaryDirectory(prefix=".ckpt_a0_") as checkpoint_0_step1:
                 trainable1.save_checkpoint(checkpoint_0_step1)
                 with patch_args(
