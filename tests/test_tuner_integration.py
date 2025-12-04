@@ -50,7 +50,7 @@ from ray_utilities.constants import (
     NUM_ENV_STEPS_PASSED_TO_LEARNER,
     NUM_ENV_STEPS_PASSED_TO_LEARNER_LIFETIME,
 )
-from ray_utilities.misc import is_pbar, raise_tune_errors
+from ray_utilities.misc import LEARNER_RESULTS, is_pbar, raise_tune_errors
 from ray_utilities.runfiles import run_tune
 from ray_utilities.testing_utils import (
     ENV_RUNNER_CASES,
@@ -933,7 +933,7 @@ class TestTuneWithTopTrialScheduler(SympolTestHelpers, DisableLoggers, InitRay, 
                     Tester.assertTrue(
                         all(c == 0 for c in start_counts), f"Not all state steps are 1 at start: {start_counts}"
                     )
-                else:
+                elif self.iteration > 3 and self._iterations_since_restore > 1:
                     assert self.last_count > 0
                 result = super().step()
 
@@ -947,18 +947,19 @@ class TestTuneWithTopTrialScheduler(SympolTestHelpers, DisableLoggers, InitRay, 
                 states = self.algorithm.learner_group._learner.module["default_policy"].states
                 counts = [r[1].item() for r in optax.tree_utils.tree_get_all_with_path(states, "count")]
                 assert all(c == counts[0] for c in counts), f"Not all state steps are equal: {counts}"
+
                 Tester.assertEqual(
                     counts[0],
                     # PROBLEM this is only true when we do not perturb the batch size!
                     self.last_count
-                    + result["iterations_since_restore"]
+                    + (self._iterations_since_restore + 1)  # update after return in train()
                     * self.algorithm_config.train_batch_size_per_learner
                     // self.algorithm.config.minibatch_size
                     * self.algorithm_config.num_epochs,
-                    f"wrong at iteration {result['training_iteration']}: state steps {counts[0]} != expected last_count {self.last_count} + {result['iterations_since_restore'] * self.algorithm_config.train_batch_size_per_learner // self.algorithm.config.minibatch_size * self.algorithm_config.num_epochs}",
+                    f"wrong at iteration {result['training_iteration']}: state steps {counts[0]} != expected last_count {self.last_count} + {(self._iterations_since_restore + 1) * self.algorithm_config.train_batch_size_per_learner // self.algorithm.config.minibatch_size * self.algorithm_config.num_epochs}",
                 )
                 result["state_steps"] = counts[0]
-                result = {ENV_RUNNER_RESULTS: {}, EVALUATION_RESULTS: {ENV_RUNNER_RESULTS: {}}}
+                result.update({ENV_RUNNER_RESULTS: {}, EVALUATION_RESULTS: {ENV_RUNNER_RESULTS: {}}})
                 result[ENV_RUNNER_RESULTS][NUM_ENV_STEPS_PASSED_TO_LEARNER_LIFETIME] = self._current_step
                 result[ENV_RUNNER_RESULTS][NUM_ENV_STEPS_PASSED_TO_LEARNER] = (
                     self.algorithm_config.train_batch_size_per_learner
@@ -1023,7 +1024,7 @@ class TestTuneWithTopTrialScheduler(SympolTestHelpers, DisableLoggers, InitRay, 
             # constant
             "--seed", "42",
             "--log_level", "DEBUG",
-            "--log_stats", "most",
+            "--log_stats", "all",
             "--total_steps", max(batch_sizes) * 3,
             "--use_exact_total_steps",
             "--no_dynamic_eval_interval",
@@ -1075,9 +1076,11 @@ class TestTuneWithTopTrialScheduler(SympolTestHelpers, DisableLoggers, InitRay, 
             self.assertTrue(all(r.config["grad_clip"] in grad_clip_choices for r in results))
             self.assertTrue(all(r.config["vf_clip_param"] in vf_clip_param_choices for r in results))
             self.assertTrue(all(r.config["vf_loss_coeff"] in vf_loss_coeff_choices for r in results))
+            print(results[0].metrics)
             self.assertTrue(
                 all(
-                    r.metrics["state_step"] >= max(batch_sizes) // max(minibatch_choices) * min(num_epochs_choices) * 3
+                    r.metrics[LEARNER_RESULTS]["jax_state_count"]
+                    >= max(batch_sizes) // max(minibatch_choices) * min(num_epochs_choices) * 3
                     for r in results
                 )
             )

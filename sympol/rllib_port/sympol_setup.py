@@ -124,8 +124,8 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
         assert isinstance(args, dict)
         # We want all of SympolCatalogOptions in there
         for k in SympolCatalogOptions.__annotations__.keys():
-            if k == "actor" and "actor" not in args:
-                args["actor"] = args["agent_type"]
+            if k == "actor" and "actor" not in args:  # on load_checkpoint without cli_args we miss these keys
+                args["actor"] = args.get("agent_type", "sympol")
             if k in args:
                 model_config[k] = args[k]
             # not supported for 3.10 and typing_extensions 4.15
