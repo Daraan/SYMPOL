@@ -196,7 +196,7 @@ class TestGroupedTopPBTIntegration(InitRay, SympolTestHelpers, DisableLoggers):
             # Constant
             "--seed", "42",
             "--log_level", "DEBUG",
-            "--log_stats", "minimal",
+            "--log_stats", "most",
             "--no_dynamic_eval_interval",
             "--test",
             "--num_envs_per_env_runner", 1,

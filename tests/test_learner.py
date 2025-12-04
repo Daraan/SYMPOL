@@ -13,13 +13,14 @@ if TYPE_CHECKING:
 
 
 class TestSympolLearner(SympolSetupDefaults):
-    @sympol_patch_args("--accumulate_gradients_every", "2")
+    @sympol_patch_args("--accumulate_gradients_every", "2", "--log_stats", "learners")
     def test_step_with_gradient_accumulation(self):
         with SympolSetup() as setup:
             # Only one step, to accumulate on every second algo.step call
             setup.config.training(num_epochs=1, train_batch_size_per_learner=128, minibatch_size=128)
             # self.assertEqual(setup.args.accumulate_gradients_every, 2)
             # self.assertEqual(setup.config.learner_config_dict["accumulate_gradients_every"], 2)
+            setup.config.reporting(log_gradients=True)
         algo = setup.build_algo()
         assert algo.config
         self.assertEqual(algo.config.minibatch_size, 128)
@@ -44,7 +45,13 @@ class TestSympolLearner(SympolSetupDefaults):
                 )
 
         # Step 1 - states should not change
-        algo.step()
+        result = algo.step()
+        # (module_id, f"gradients_{optimizer_name}_global_norm")
+        for key in ("actor", "critic"):
+            # NOTE: Gradients of this step are logged only, so not their accumulation
+            assert result["learners"]["default_policy"][f"gradients_{key}_global_norm"] > 0.0, (
+                f"Expected positive gradient norm for {key} after step 1"
+            )
         states_step1 = learner_module.states.copy()
         for key in ("actor",):  # Currently critic does not accumulate gradients
             self.util_test_state_equivalence(
