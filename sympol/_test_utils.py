@@ -3,26 +3,28 @@ from __future__ import annotations
 import sys
 from dataclasses import asdict
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Optional, overload
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast, overload
 from unittest import mock
 
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import optax
+import pytest
 from ray.rllib.algorithms.ppo.ppo import PPO, PPOConfig
 
 from ray_utilities import DefaultTrainable
+from ray_utilities.jax.jax_learner import JaxLearner
 from ray_utilities.testing_utils import (
     _NOT_PROVIDED,
     DisableGUIBreakpoints,
-    SetupWithEnv,
     TestHelpers,
     get_explicit_required_keys,
     get_explicit_unrequired_keys,
     get_leafpath_value,
     get_optional_keys,
     get_required_keys,
+    no_parallel_envs,
 )
 from ray_utilities.testing_utils import (
     SetupDefaults as _SetupDefaults,
@@ -38,6 +40,12 @@ from sympol.rllib_port.sympol_setup import SympolSetup
 from sympol.sdt import Actor_SDT, Critic_SDT
 from sympol.sympol import SYMPOL_RL
 from sympol.utils.utils import ActorTrainState, TrainState
+
+if TYPE_CHECKING:
+    from ray_utilities.jax.ppo.compute_ppo_loss import _PPOSettings
+    from ray_utilities.training.default_class import TrainableBase
+    from sympol.rllib_port.core.algorithms import SympolPPOConfig
+
 
 if TYPE_CHECKING:
     import chex
@@ -61,7 +69,116 @@ __all__ = [
 _SympolTrainable = DefaultTrainable[SympolArgumentParser, PPOConfig, PPO]
 
 
+def sympol_patch_args(*args, **kwargs):
+    return _patch_args("--agent_type", "sympol", *args, **kwargs)
+
+
+args_train_no_tuner = sympol_patch_args("-J", "1", "-it", "2", "-np")
+clean_args = mock.patch.object(sys, "argv", ["file.py"])
+"""Use when comparing to CLIArgs"""
+
+
+patch_args = sympol_patch_args
+
+
 class SympolTestHelpers(TestHelpers):
+    def get_modules(self, trainable: TrainableBase):
+        runner_module = cast("SympolPPOModule", trainable.algorithm.get_module())
+        learner_module = cast("SympolPPOModule", trainable.algorithm.learner_group._learner.module["default_policy"])
+        return runner_module, learner_module
+
+    def compare_jax_learning_rate_set(self, trainable, target_lr: float, msg: str = ""):
+        runner_module, learner_module = self.get_modules(trainable)
+
+        # Check learner module
+        learner_actor_state = learner_module.states["actor"]
+        lrs_learner = JaxLearner._find_lrs(learner_actor_state.opt_state)
+        self.assertTrue(len(lrs_learner) > 0, f"{msg} No hyperparameters found in learner opt_state")
+        self.assertTrue(
+            any(abs(lr - target_lr) < 1e-6 for lr in lrs_learner),
+            f"{msg} Target LR {target_lr} not found in learner opt_state. Found: {optax.tree_utils.tree_get_all_with_path(learner_actor_state.opt_state, 'learning_rate')}",
+        )
+
+        # Check runner module
+        runner_actor_state = runner_module.states["actor"]
+        lrs_runner = JaxLearner._find_lrs(runner_actor_state.opt_state)
+        self.assertTrue(len(lrs_runner) > 0, f"{msg} No hyperparameters found in runner opt_state")
+        self.assertTrue(
+            any(abs(lr - target_lr) < 1e-6 for lr in lrs_runner),
+            f"{msg} Target LR {target_lr} not found in runner opt_state. Found: {optax.tree_utils.tree_get_all_with_path(runner_actor_state.opt_state, 'learning_rate')}",
+        )
+
+    def compare_config_attributes(
+        self,
+        config1: SympolPPOConfig | _PPOSettings,
+        expected_valued: dict[str, Any],
+        msg: str = "",
+    ):
+        for k, v in expected_valued.items():
+            actual_value = getattr(config1, k)
+            self.assertEqual(
+                actual_value,
+                v,
+                f"{msg} PPO Config key '{k}' expected value {v}, got {actual_value}",
+            )
+
+    def check_grad_clip_set(self, trainable, target_clip: float, msg: str = ""):
+        runner_module, learner_module = self.get_modules(trainable)
+
+        for module_name, module in [("learner", learner_module), ("runner", runner_module)]:
+            # module.pi is the actor (SympolRLModel)
+            actor = module.pi
+            config = actor.config
+
+            # Handle potential key differences or defaults
+            actual_clip = config.get("grad_clip")
+            if actual_clip is None:
+                raise KeyError("grad_clip not found, and max_grad_norm handling not implemented")
+
+            self.assertIsNotNone(actual_clip, f"{msg} {module_name}: grad_clip not found in actor config")
+            self.assertAlmostEqual(
+                actual_clip,
+                target_clip,
+                places=6,
+                msg=f"{msg} {module_name}: Expected grad_clip {target_clip}, got {actual_clip}",
+            )
+
+    def check_module_config_setting(self, trainable, key: str, expected: bool | Any = True):
+        runner_module, learner_module = self.get_modules(trainable)
+
+        for module_name, module in [("learner", learner_module), ("runner", runner_module)]:
+            # module.pi is the actor (SympolRLModel)
+            actor = module.pi
+            config = actor.config
+            # Cannot check actor_states directly as jit compiled
+
+            self.assertIs(
+                module.model_config.get(key),
+                expected,
+                f"{module_name}: Expected adamW to be {expected}, got {module.model_config.get('adamW')}",
+            )
+
+            actual_adamW = config.get(key)
+            self.assertIsNotNone(actual_adamW, f"{module_name}: adamW not found in actor config")
+            self.assertIs(
+                actual_adamW,
+                expected,
+                f"{module_name}: Expected adamW to be {expected}, got {actual_adamW}",
+            )
+
+            if hasattr(module, "vf"):
+                critic = module.vf
+                critic_config = critic.config
+                actual_adamW_critic = critic_config.get(key)
+                self.assertIsNotNone(actual_adamW_critic, f"{module_name}: adamW not found in critic config")
+                self.assertIs(
+                    actual_adamW_critic,
+                    expected,
+                    f"{module_name}: Expected adamW to be {expected} in critic, got {actual_adamW_critic}",
+                )
+            else:
+                assert module.inference_only
+
     @overload
     def get_trainable(
         self,
@@ -160,16 +277,7 @@ class SympolTestHelpers(TestHelpers):
                 )
         module = trainable.algorithm.get_module()
         self.assertIsInstance(module, SympolPPOModule)
-        return trainable, result
-
-
-def sympol_patch_args(*args, **kwargs):
-    return _patch_args("--agent_type", "sympol", *args, **kwargs)
-
-
-args_train_no_tuner = sympol_patch_args("-J", "1", "-it", "2", "-np")
-clean_args = mock.patch.object(sys, "argv", ["file.py"])
-"""Use when comparing to CLIArgs"""
+        return trainable, result  # pyright: ignore[reportReturnType]
 
 
 class SympolSetupDefaults(_SetupDefaults, SympolTestHelpers):

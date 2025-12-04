@@ -153,8 +153,16 @@ extend-generics = [
     "ray_utilities.setup.ExperimentSetupBase",
     "ray_utilities.jax.jax_model.FlaxRLModel",
     "rllib_port.core.stated_flax_model.StatedCriticFlaxRLModel",
-    "rllib_port.core.stated_flax_model.StatedActorFlaxRLModel"
+    "rllib_port.core.stated_flax_model.StatedActorFlaxRLModel",
+    "ray_utilities.setup.scheduled_tuner_setup.PBTSetup",
+    "ray_utilities.setup.scheduled_tuner_setup.MLPPBTSetup",
+    "ray_utilities.jax.jax_model.FlaxRLModel",
+    "ray_utilities.setup.ppo_mlp_setup.MLPSetup",
+    "ray_utilities.setup.ppo_mlp_setup.PPOMLPSetup",
+    "ray_utilities.config.DefaultArgumentParser",
+    "ray_utilities.config.parser.default_argument_parser.DefaultArgumentParser",
 ]
+
 
 [tool.isort]
 known_first_party = ["ray_utilities"]
@@ -164,18 +172,26 @@ profile = "black"
 
 [tool.pyright]
 extraPaths = ["../ray_utilities/"]
-exclude = ["standalone/**/*", "sympol/utils/envs/drawing", "**/ppo_gymnax.py", "**/ppo_new_interface.py", "./ppo.py", "**/node_modules", "**/__pycache__"]  # temp for performance
+exclude = [
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.git/*",
+  ".vscode/*",
+  "build",
+  "dist",
+  ".venv",
+  "**/outputs/**",
+  "standalone",
+  "sympol/utils/envs/drawing",
+  "**/ppo_gymnax.py",
+  "**/ppo_new_interface.py"
+]
 extends = "ray_utilities/pyproject.toml"
 reportDeprecated = "warning"
 reportUnnecessaryComparison = "warning"
 reportUnnecessaryCast = "warning"
 reportPrivateImportUsage = "warning"
-packageIndexDepths = [
-  { name = "sklearn", depth = 2, includeAllSymbols = true },
-  { name = "matplotlib", depth = 3, includeAllSymbols = false },
-  { name = "ray_utilities", depth = 4, includeAllSymbols = true },
-  { name = "ray", depth = 2, includeAllSymbols = true }
-]
+
 
 [tool.pytest.ini_options]
 pythonpath = [

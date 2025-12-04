@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from inspect import ismethod
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
 import jax
@@ -111,21 +112,36 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
             )
 
     @classmethod
-    def _model_config_from_args(cls, args: NamespaceType[SympolArgumentParser]) -> dict[str, Any] | None:
-        model_config = super()._model_config_from_args(args) or {}
+    def _model_config_from_args(
+        cls, args: NamespaceType[SympolArgumentParser] | dict[str, Any]
+    ) -> dict[str, Any] | None:
+        model_config = super()._model_config_from_args(args=args) or {}
+        if not isinstance(args, dict):
+            config_class, _ = cls.get_algorithm_classes(args)
+            args = args.as_dict() if hasattr(args, "as_dict") else vars(args).copy()
+        else:
+            config_class, _ = cls.get_algorithm_classes(SimpleNamespace(**args))  # pyright: ignore[reportArgumentType]
+        assert isinstance(args, dict)
         # We want all of SympolCatalogOptions in there
         for k in SympolCatalogOptions.__annotations__.keys():
-            if hasattr(args, k):
-                model_config[k] = getattr(args, k)
+            if k == "actor" and "actor" not in args:
+                args["actor"] = args["agent_type"]
+            if k in args:
+                model_config[k] = args[k]
             # not supported for 3.10 and typing_extensions 4.15
             elif sys.version_info >= (3, 11) and k in SympolCatalogOptions.__required_keys__:
-                raise AttributeError(f"Args has no attribute {k} required for SympolCatalogOptions")
+                raise AttributeError(f"Args has no attribute/key {k} required for SympolCatalogOptions")
             elif k in SympolCatalogOptions.__required_keys__:
                 annots = SympolCatalogOptions.__annotations__
                 if k in annots and type_get_origin(annots[k]) is NotRequired:
                     # optional field
                     continue
-                raise AttributeError(f"Args has no attribute {k} required for SympolCatalogOptions")
+                raise AttributeError(f"Args has no attribute/key {k} required for SympolCatalogOptions")
+        # Remove auto includes
+        for k in config_class()._model_config_auto_includes.keys():
+            model_config.pop(k, None)
+        if not model_config:
+            return None
         return model_config
 
     @classmethod
