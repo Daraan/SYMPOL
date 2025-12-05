@@ -5,15 +5,17 @@ from dataclasses import asdict
 from inspect import ismethod
 from typing import Any
 
-from frozendict import frozendict
 import pytest
+from frozendict import frozendict
 from tap import Tap
 
 from ray_utilities.callbacks.algorithm.dynamic_batch_size import DynamicGradientAccumulation
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
 from ray_utilities.callbacks.algorithm.exact_sampling_callback import exact_sampling_callback
+from ray_utilities.config import DefaultArgumentParser
 from ray_utilities.connectors.remove_masked_samples_connector import RemoveMaskedSamplesConnector
 from ray_utilities.learners.remove_masked_samples_learner import RemoveMaskedSamplesLearner
+from ray_utilities.testing_utils import AlgorithmSetup, MLPSetup
 from sympol._test_utils import (
     SympolSetupDefaults,
     args_train_no_tuner,
@@ -577,6 +579,52 @@ class TestExtensionsAdded(SympolSetupDefaults):
         args = parser.parse_args()
         self.assertIsNone(args.render_mode, "render_mode should be None when render_env is False (default)")
         self.assertFalse(args.render_env, "render_env should be False by default")
+
+    def test_argument_patching(self):
+        with patch_args("--env_type", "Acrobot-v1"), SympolArgumentParser.patch_args(
+            "--tune", "test",
+            "--num_samples", 1,
+            "--env_seeding_strategy", "same",
+            # constant
+            "-a", "sympol",
+            "--log_level", "DEBUG",
+            config_files=["experiments/pbt.cfg"]
+        ):  # fmt: skip
+            self.assertIn("--env_type", sys.argv)
+            self.assertIn("Acrobot-v1", sys.argv)
+            with SympolSetup(
+                config_files=["experiments/pbt.cfg", "experiments/default.cfg"],
+            ) as setup:
+                setup.PROJECT = "SYMPOL-<critic>-<env_type>"  # Upper category on Comet / WandB, parent directory
+                setup.GROUP = "pbt-<tune>"  # group on Comet / WandB, sub directory
+            self.assertEqual(setup.args.env_type, "Acrobot-v1")
+            self.assertEqual(setup.args.agent_type, "sympol")
+            self.assertIn("Acrobot-v1", setup.project)
+
+    def test_argument_patching_with_tag(self):
+        with patch_args("--env_type", "Acrobot-v1"), SympolArgumentParser.patch_args(
+            "--tune", "test",
+            "--num_samples", 1,
+            "--env_seeding_strategy", "same",
+            # constant
+            "-a", "sympol",
+            "--log_level", "DEBUG",
+            "--tag:sometag",
+            config_files=["experiments/pbt.cfg"]
+        ):  # fmt: skip
+            self.assertIn("--env_type", sys.argv)
+            self.assertIn("Acrobot-v1", sys.argv)
+            with SympolSetup(
+                config_files=["experiments/pbt.cfg", "experiments/default.cfg"],
+            ) as setup:
+                setup.PROJECT = "SYMPOL-<critic>-<env_type>"  # Upper category on Comet / WandB, parent directory
+                setup.GROUP = "pbt-<tune>"  # group on Comet / WandB, sub directory
+            print("AFTER EXIT")
+            self.assertEqual(setup.args.env_type, "Acrobot-v1")
+            self.assertEqual(setup.args.agent_type, "sympol")
+            self.assertIn("Acrobot-v1", setup.project)
+            self.assertIn("pbt", setup.args.tags)
+            self.assertIn("sometag", setup.create_tags())
 
 
 if __name__ == "__main__":

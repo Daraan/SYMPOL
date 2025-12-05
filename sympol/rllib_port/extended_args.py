@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from typing import TYPE_CHECKING, Any, Dict, Literal
 
 from typing_extensions import Self, deprecated
@@ -25,6 +26,9 @@ def _float_or_none(value: str) -> float | None:
     if value.lower() in ("none", "null"):
         return None
     return float(value)
+
+
+_NOT_FOUND = object()
 
 
 class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, SympolCLIArgs):
@@ -54,9 +58,14 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
             """The value of static_batch is not reliable, as it is forwarded to dynamic_batch"""
             ...
 
-    def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
-        # this will call ArgumentParserWithDefaults.parse_unknown_args which sets explicit args
-        return DefaultArgumentParser.parse_args(self, args, known_only=known_only, **kwargs)  # type: ignore[return-type]
+    def parse_args(self, args=None, *, known_only=False, **kwargs) -> Self:
+        # Ensure explicit args are tracked by calling parse_known_args first
+        if args is None:
+            args = sys.argv[1:]
+        # Set explicit args manually before calling super
+        self._explicit_args = {arg[2:] for arg in args if arg.startswith("--")}
+        # Call the full chain to get proper dataclass processing
+        return super(ArgumentParserWithDefaults, self).parse_args(args, known_only=known_only, **kwargs)  # type: ignore[return-type]
 
     def configure(self) -> None:
         super().configure()
@@ -182,7 +191,9 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
             arg_normalized = arg.replace("-", "_")
             dest_arg = dest_mapping.get(arg_normalized, arg_normalized)
             mapped_arg = arg_mappings.get(dest_arg, dest_arg)
-            explicit_arg_values[mapped_arg] = getattr(self, dest_arg)
+            attr = getattr(self, dest_arg, _NOT_FOUND)
+            if attr is not _NOT_FOUND:
+                explicit_arg_values[mapped_arg] = attr
 
         no_update = True
         if self.use_best_config:
