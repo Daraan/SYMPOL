@@ -43,22 +43,23 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
     def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:  # noqa: ARG002
         # action_dim and action_indices must be set in config before catalog construction
         action_dim = self._model_config_dict.get("action_dim")
-        action_indices = self._model_config_dict.get("action_indices")
-        if action_dim is None or action_indices is None:
-            raise ValueError(
-                "action_dim and action_indices must be set in model_config_dict before catalog construction."
-            )
+        if action_dim is None:
+            logger.error("action_dim and action_indices should be set in the model_config_dict before calling setup()")
+            try:
+                action_dim = self.action_space.n  # type: ignore
+            except AttributeError:
+                action_dim = self.action_space.shape[-1]  # type: ignore
         if self._actor_type in ("mlp", "stateActionDT"):
             assert self.action_space.n == action_dim
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
                     config=self._model_config_dict,
-                    action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
+                    action_dim=action_dim,  # pyright: ignore[reportAttributeAccessIssue]
                 )
             else:
                 actor = ActorMLPContinuousModel(
                     config=self._model_config_dict,
-                    action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
+                    action_dim=action_dim,  # pyright: ignore[reportAttributeAccessIssue]
                 )
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for MLP's
         elif self._actor_type == "sympol":
@@ -71,7 +72,7 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
         elif self._actor_type in ("sdt", "d-sdt"):
             actor = ActorSDTModel(
                 config=self._model_config_dict,
-                action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
+                action_dim=action_dim,  # pyright: ignore[reportAttributeAccessIssue]
             )  # , temp=1)
 
             # args.learning_rate_actor = args.learning_rate_critic  # same lr for SDT's

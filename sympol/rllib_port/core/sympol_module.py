@@ -115,6 +115,18 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         self.states[ACTOR] = jax.device_put(self.states[ACTOR], device)
         self.states[CRITIC] = jax.device_put(self.states[CRITIC], device)
 
+    def setup(self):
+        if "action_dim" not in self.model_config:
+            logger.warning("action_dim not found in model_config_dict: %s", self.model_config.keys())
+        try:
+            # HAve to open up a frozen dict
+            self.model_config = dict(self.model_config)  # pyright: ignore[reportAttributeAccessIssue]
+            self.model_config["action_dim"] = self.action_space.n  # type: ignore
+        except AttributeError:
+            self.model_config = dict(self.model_config)  # pyright: ignore[reportAttributeAccessIssue]
+            self.model_config["action_dim"] = self.action_space.shape[-1]  # type: ignore
+        super().setup()
+
     # region: forward methods
 
     # Analog to DefaultPPOTorchRLModule
@@ -231,13 +243,14 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
             # setup catalog just to be sure
             self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
             self.setup()
-            if self.pi.config == self.pi.config | self.model_config:
+            if self.pi.config != self.pi.config | self.model_config:  # pyright: ignore[reportOperatorIssue]
                 diff = {k: v for k, v in self.model_config.items() if self.pi.config.get(k, None) != v}
                 # if set(diff.keys()) != {"action_type"}:
                 raise ValueError(
-                    f"Pi model config not updated correctly in set_state {self.pi.config} \nvs\n{self.model_config}\ndiff:\n{diff}"
+                    f"Pi model config not updated correctly in set_state {self.pi.config}"
+                    f"\nvs\n{self.model_config}\ndiff:\n{diff}"
                 )
-            if hasattr(self, "vf") and self.vf.config != self.vf.config | self.model_config:
+            if hasattr(self, "vf") and self.vf.config != self.vf.config | self.model_config:  # pyright: ignore[reportOperatorIssue]
                 diff = {k: v for k, v in self.model_config.items() if self.vf.config.get(k, None) != v}
                 # if set(diff.keys()) != {"action_type"}:
                 raise ValueError(
