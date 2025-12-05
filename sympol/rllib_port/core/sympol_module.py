@@ -222,12 +222,12 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                         build_new = True
                 else:
                     assert self.inference_only or build_new
-                if build_new:
-                    # setup catalog just to be sure
-                    self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
-                    self.setup()
-                    assert self.pi.config == self.pi.config | self.model_config
-                    assert not hasattr(self, "vf") or self.vf.config == self.vf.config | self.model_config
+        if build_new or not hasattr(self, "pi"):
+            # setup catalog just to be sure
+            self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
+            self.setup()
+            assert self.pi.config == self.pi.config | self.model_config
+            assert not hasattr(self, "vf") or self.vf.config == self.vf.config | self.model_config
             # TODO need to updates models
         super().set_state(state)
         jax_state = state["jax_state"].copy()

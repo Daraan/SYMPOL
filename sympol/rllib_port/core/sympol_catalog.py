@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import functools
+import logging
 from typing import TYPE_CHECKING
 
+import gymnasium as gym
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
-
 from ray_utilities.dummy_encoder import DummyActorCriticEncoderConfig
 from ray_utilities.jax.catalog.jax_catalog import JaxCatalog
+
 from sympol.rllib_port.mlp.mlp_model import ActorMLPContinuousModel, ActorMLPModel, CriticMLPModel
 from sympol.rllib_port.sdt.sdt_model import ActorSDTModel, CriticSDTModel
 from sympol.rllib_port.sympol.sympol_model import SympolRLModel
 
 if TYPE_CHECKING:
-    import gymnasium as gym
-
     from sympol.config_types.params_types import SympolCatalogOptions
+
+logger = logging.getLogger(__name__)
 
 
 class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
@@ -39,6 +41,20 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
         self._model_config_dict: SympolCatalogOptions
 
     def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:  # noqa: ARG002
+        # No access to args here
+        if isinstance(self.action_space, gym.spaces.Discrete):
+            action_dim = int(self.action_space.n)
+            action_indices = list(range(action_dim))
+        elif isinstance(self.action_space, gym.spaces.Box):
+            action_dim = self.action_space.shape[-1]
+            action_indices = list(range(action_dim))
+            print("Actions:", action_dim)
+            if self._model_config_dict["action_type"] != "continuous":
+                logger.warning(
+                    f"Action space is Box but action_type is {self._model_config_dict['action_type']}, setting to continuous."
+                )
+            self._model_config_dict["action_type"] = "continuous"
+        self._model_config_dict["action_indices"] = action_indices
         if self._actor_type in ("mlp", "stateActionDT"):
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
@@ -55,7 +71,7 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
             assert self.observation_space.shape is not None
             return SympolRLModel(
                 obs_dim=self.observation_space.shape[0],
-                action_dim=self.action_space.n,  # pyright: ignore[reportAttributeAccessIssue]
+                action_dim=action_dim,
                 config=self._model_config_dict,
             )
         elif self._actor_type in ("sdt", "d-sdt"):
