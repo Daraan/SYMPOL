@@ -196,6 +196,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         return {"jax_state": state_dict, "model_config": self.model_config}
 
     def set_state(self, state: JaxModuleState | StateDict | SympolModuleState) -> None:
+        # NOTE: this might get called without init first
         if "model_config" in state:
             state = state.copy()
             new_config = state.get("model_config")
@@ -207,7 +208,9 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                 build_new = False
             if self.model_config:
                 # with catalog update these all should now be fine.
-                if self.pi.config != self.pi.config | self.model_config:
+                if not hasattr(self, "pi"):
+                    build_new = True
+                elif self.pi.config != self.pi.config | self.model_config:
                     # model needs update
                     logger.info("Updating pi model config in set_state")
                     # self.pi.config = self.pi.config.update(self.model_config)
@@ -218,7 +221,7 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                         logger.info("Updating vf model config in set_state")
                         build_new = True
                 else:
-                    assert self.inference_only
+                    assert self.inference_only or build_new
                 if build_new:
                     # setup catalog just to be sure
                     self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
