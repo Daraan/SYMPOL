@@ -13,7 +13,7 @@ import numpy.testing as npt
 from ray.rllib.core.columns import Columns
 
 from ray_utilities.callbacks.algorithm.dynamic_buffer_callback import DynamicBufferUpdate
-from ray_utilities.testing_utils import patch_args
+from ray_utilities.testing_utils import no_parallel_envs, patch_args
 from sympol import args  # noqa: F401
 from sympol._test_utils import DisableGUIBreakpoints, SympolSetupDefaults, clean_args, sympol_patch_args
 from sympol.mlp import Critic_MLP
@@ -295,6 +295,51 @@ class TestSetup(DisableGUIBreakpoints, SympolSetupDefaults):
                     or DynamicBufferUpdate not in config.callbacks_class._callback_list  # type: ignore[attr-defined]
                 )
             )
+
+
+class TestSympolSetup(unittest.TestCase):
+    @no_parallel_envs
+    def test_sympol_setup_discrete(self):
+        # test discrete
+        with patch_args("-a", "sympol", "--env_type", "CartPole-v1", "--batch_size", 128):
+            setup = SympolSetup()
+            assert setup.args.env_type == "CartPole-v1"
+        trainable = setup.trainable_class(setup.sample_params())
+        trainable.step()
+
+    @no_parallel_envs
+    def test_sympol_setup_continuous_legacy(self):
+        # test continuous
+        with patch_args(
+            "-a", "sympol", "--env_type", "Ant-v5", "--batch_size", 128, "--legacy", "--action_type", "continuous"
+        ):
+            setup = SympolSetup()
+            assert setup.args.env_type == "Ant-v5"
+        assert setup.args.action_type == "continuous"
+        trainable = setup.trainable_class(setup.sample_params())
+        assert "action_type" in trainable.algorithm_config.model_config
+        assert trainable.algorithm_config.model_config["action_type"] == "continuous"
+        module = trainable.algorithm.get_module()
+        assert module.model_config["action_type"] == "continuous"
+        assert module.pi.config["action_type"] == "continuous"
+
+        trainable.step()
+
+    @no_parallel_envs
+    def test_sympol_setup_continuous(self):
+        # test continuous
+        with patch_args("-a", "sympol", "--env_type", "Ant-v5", "--batch_size", 128):
+            setup = SympolSetup()
+            assert setup.args.env_type == "Ant-v5"
+        assert setup.args.action_type == "continuous"
+        trainable = setup.trainable_class(setup.sample_params())
+        assert "action_type" in trainable.algorithm_config.model_config
+        assert trainable.algorithm_config.model_config["action_type"] == "continuous"
+        module = trainable.algorithm.get_module()
+        assert module.model_config["action_type"] == "continuous"
+        assert module.pi.config["action_type"] == "continuous"
+        assert module.pi.config["action_dim"] == 8, module.pi.config["action_dim"]
+        trainable.step()
 
 
 if __name__ == "__main__":

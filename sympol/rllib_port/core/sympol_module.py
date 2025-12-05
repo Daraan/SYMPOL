@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union, cast
 
 import jax
+import jax.numpy as jnp
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI
@@ -140,9 +141,9 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
         )
         if self.model_config["action_type"] != "discrete":
             # mean, log_std = model_out
-            # TODO: Figure which return values to use
-            # if continuous we need a mean and log_std for a non-categorical distribution
-            # TODO: Columns.ACTION_LOGP
+            # For SYMPOL LOG has no first dimension and would be squased into batch size
+            if model_out[1].ndim == 1:
+                model_out = (model_out[0], model_out[1][jnp.newaxis])
             output[Columns.ACTION_DIST_INPUTS] = model_out
         else:
             output[Columns.ACTION_DIST_INPUTS] = model_out
@@ -197,10 +198,10 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
 
     def set_state(self, state: JaxModuleState | StateDict | SympolModuleState) -> None:
         # NOTE: this might get called without init first
+        build_new = None
         if "model_config" in state:
             state = state.copy()
             new_config = state.get("model_config")
-            build_new = None
             if new_config and self.model_config != new_config:
                 self.model_config = new_config
                 self.catalog = type(self.catalog)(self.observation_space, self.action_space, new_config)  # pyright: ignore[reportArgumentType]
@@ -215,10 +216,14 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
                     logger.info("Updating pi model config in set_state")
                     # self.pi.config = self.pi.config.update(self.model_config)
                     # should rebuild it entirely
+                    diff = {k: v for k, v in self.model_config.items() if self.pi.config.get(k, None) != v}
+                    # if set(diff.keys()) != {"action_type"}:
                     build_new = True
                 if hasattr(self, "vf"):
                     if self.vf.config != self.vf.config | self.model_config:
                         logger.info("Updating vf model config in set_state")
+                        diff = {k: v for k, v in self.model_config.items() if self.vf.config.get(k, None) != v}
+                        # if set(diff.keys()) != {"action_type"}:
                         build_new = True
                 else:
                     assert self.inference_only or build_new
@@ -226,9 +231,20 @@ class SympolPPOModule(GetJaxDistributionsMixin, JaxPPOModule):
             # setup catalog just to be sure
             self.catalog = type(self.catalog)(self.observation_space, self.action_space, self.model_config)  # pyright: ignore[reportArgumentType]
             self.setup()
-            assert self.pi.config == self.pi.config | self.model_config
-            assert not hasattr(self, "vf") or self.vf.config == self.vf.config | self.model_config
+            if self.pi.config == self.pi.config | self.model_config:
+                diff = {k: v for k, v in self.model_config.items() if self.pi.config.get(k, None) != v}
+                # if set(diff.keys()) != {"action_type"}:
+                raise ValueError(
+                    f"Pi model config not updated correctly in set_state {self.pi.config} \nvs\n{self.model_config}\ndiff:\n{diff}"
+                )
+            if hasattr(self, "vf") and self.vf.config != self.vf.config | self.model_config:
+                diff = {k: v for k, v in self.model_config.items() if self.vf.config.get(k, None) != v}
+                # if set(diff.keys()) != {"action_type"}:
+                raise ValueError(
+                    f"VF model config not updated correctly in set_state {self.vf.config} \nvs\n{self.model_config}\ndiff:\n{diff}"
+                )
             # TODO need to updates models
+            # return
         super().set_state(state)
         jax_state = state["jax_state"].copy()
         jax_state.setdefault(ACTOR, None)  # pyright: ignore[reportArgumentType, reportCallIssue]

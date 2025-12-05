@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, overload
 
 import jax
 import jax.numpy as jnp
@@ -15,9 +15,11 @@ from sympol.utils.utils import ActorTrainState
 
 if TYPE_CHECKING:
     import chex
+    from chex import Array
+    from flax.core.frozen_dict import FrozenDict
+    from flax.typing import FrozenVariableDict
     from ray.rllib.utils.typing import TensorType
 
-    from ray_utilities.typing.model_return import Batch
     from sympol.config_types.params_types import SYMPOLModelArgsDict, SympolParams
 
 logger = logging.getLogger(__name__)
@@ -30,9 +32,28 @@ class SympolRLModel(JaxRLModel):
         def __config_type(self):  # noqa
             self.config: SympolParams
 
-        def __call__(self, *args, parameters: Batch, indices: dict, **kwargs) -> jnp.ndarray:
-            """Call the model."""
-            return super().__call__(*args, parameters=parameters, indices=indices, **kwargs)
+        @overload
+        def __call__(
+            self, obs: "Array", *, parameters: "FrozenDict", indices: Any
+        ) -> "Array | tuple[Array, Array]": ...
+
+        @overload
+        def __call__(self, obs: "Array", *, parameters: "FrozenDict", **kwargs) -> "Array | tuple[Array, Array]": ...
+
+    def __unsqueeze_log_std(self, log_std: "Array", target_dim: int) -> "Array":
+        """Unsqueeze log_std to match target_dim."""
+        while log_std.ndim < target_dim:
+            log_std = log_std[jnp.newaxis]
+        return log_std
+
+    def _forward(
+        self, input_dict, *, parameters, indices: FrozenVariableDict | Mapping, **kwargs
+    ) -> tuple[chex.Array, chex.Array] | jax.Array:
+        out = super()._forward(input_dict, parameters=parameters, indices=indices, **kwargs)
+        if self.config["action_type"] != "discrete":
+            mean, log_std = out
+            return mean, self.__unsqueeze_log_std(log_std, target_dim=mean.ndim)
+        return out
 
     def __init__(self, *, obs_dim: int, action_dim: int, config: SYMPOLModelArgsDict):
         JaxRLModel.__init__(self, config=config)  # type: ignore[arg-type] not a ModelConfig

@@ -290,7 +290,10 @@ class SympolSetupDefaults(_SetupDefaults, SympolTestHelpers):
         self._OBSERVATION_SPACE = env.observation_space
         self._ACTION_SPACE = env.action_space
 
-        self._DEFAULT_CONFIG_DICT: Any = MappingProxyType(asdict(SympolCLIArgs()))
+        self._DEFAULT_CONFIG_DICT: Any = asdict(SympolCLIArgs())
+        self._DEFAULT_CONFIG_DICT["action_dim"] = self._ACTION_SPACE.n  # type: ignore[attr-defined]
+        self._DEFAULT_CONFIG_DICT["action_indices"] = list(range(self._DEFAULT_CONFIG_DICT["action_dim"]))
+        self._DEFAULT_CONFIG_DICT = MappingProxyType(self._DEFAULT_CONFIG_DICT)
         self._DEFAULT_NAMESPACE = SympolCLIArgs()
         self._INPUT_LENGTH = env.observation_space.shape[0]  # pyright: ignore[reportOptionalSubscript]
         self._DEFAULT_INPUT = jnp.arange(self._INPUT_LENGTH * 2).reshape((2, self._INPUT_LENGTH))

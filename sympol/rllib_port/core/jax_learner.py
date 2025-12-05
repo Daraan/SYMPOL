@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
-from frozendict import frozendict
 import jax
 import jax.numpy as jnp
+from frozendict import frozendict
 from ray.rllib.core.columns import Columns
 from ray.rllib.policy.tf_mixins import (
     EntropyCoeffSchedule,
@@ -13,9 +14,9 @@ from ray.rllib.policy.tf_mixins import (
     LearningRateSchedule,
     ValueNetworkMixin,
 )
+from ray_utilities.jax.ppo.jax_ppo_learner import JaxPPOLearner
 
 from sympol.config_types.args_types import SympolCLIArgs
-from ray_utilities.jax.ppo.jax_ppo_learner import JaxPPOLearner
 from sympol.utils.ppo import update_ppo
 
 from ._sample_batch_to_storage import batch_to_storage
@@ -86,9 +87,10 @@ class JaxPPOLearnerWithLegacy(JaxPPOLearner):
             critic: Critic_SDT | Critic_MLP = module.vf.model
 
             # Need a NameSpace and not a dict
+            valid = {f.name for f in dataclasses.fields(SympolCLIArgs)}
             args: SympolCLIArgs = SympolCLIArgs(
                 **{  # pyright: ignore[reportArgumentType]
-                    k: v for k, v in module.model_config.items() if k in SympolCLIArgs.__annotations__
+                    k: v for k, v in module.model_config.items() if k in valid
                 }
             )
             args.n_envs = 1

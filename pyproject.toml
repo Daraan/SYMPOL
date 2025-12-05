@@ -18,7 +18,7 @@ exclude = '''
 
 [project]
 name = "sympol"
-version = "0.3.0"
+version = "0.4.0"
 description = "SYMPOL package"
 authors = [
   { name = "Your Name", email = "your.email@example.com" }

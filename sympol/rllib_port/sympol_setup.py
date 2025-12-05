@@ -155,12 +155,38 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
             model_config_base.pop(k, None)
         if not model_config_base:
             model_config_base = None
+
+        # --- Action space detection and config injection ---
+        import gymnasium as gym
+        from sympol.configs import get_action_type
+
+        env = gym.make(args.env_id)
+        action_space = env.action_space
+        env.close()
+        if isinstance(action_space, gym.spaces.Discrete):
+            action_dim = int(action_space.n)
+            action_indices = list(range(action_dim))
+            action_type = "discrete"
+            if args.action_type == "continuous":
+                raise ValueError("Action space is discrete, but args.action_type is set to 'continuous'")
+        elif isinstance(action_space, gym.spaces.Box):
+            action_dim = action_space.shape[-1]
+            action_indices = list(range(action_dim))
+            action_type = "continuous"
+            args.action_type = "continuous"
+        else:
+            raise ValueError(f"Unsupported action space type: {type(action_space)}")
+        # Use get_action_type for consistency
+        if model_config_base is not None:
+            model_config_base["action_dim"] = action_dim
+            model_config_base["action_indices"] = action_indices
+            model_config_base["action_type"] = action_type
+
         config, _spec = create_algorithm_config(
             args,
             env_type=args.env_type,
             module_class=SympolPPOModule,
             catalog_class=SympolJaxPPOCatalog,
-            # WTF we we store all data in here?
             model_config=model_config_base,
             framework="torch",  # cannot use "jax" here
             discrete_eval=False,
@@ -226,7 +252,6 @@ class SympolSetup(AlgorithmSetup[SympolArgumentParser, SympolPPOConfig, PPO]):
                 train_batch_size_per_learner=args.train_batch_size_per_learner,
             )
             assert not config.learner_config_dict.get("legacy")
-        # logging
         logger.info(
             "Rllib Minibatch size: %s, Sympol PPO minibatch size suggestion %s",
             args.minibatch_size,

@@ -41,21 +41,15 @@ class SympolJaxPPOCatalog(JaxCatalog, PPOCatalog):
         self._model_config_dict: SympolCatalogOptions
 
     def build_pi_head(self, framework: str) -> SympolRLModel | ActorMLPModel | ActorMLPContinuousModel | ActorSDTModel:  # noqa: ARG002
-        # No access to args here
-        if isinstance(self.action_space, gym.spaces.Discrete):
-            action_dim = int(self.action_space.n)
-            action_indices = list(range(action_dim))
-        elif isinstance(self.action_space, gym.spaces.Box):
-            action_dim = self.action_space.shape[-1]
-            action_indices = list(range(action_dim))
-            print("Actions:", action_dim)
-            if self._model_config_dict["action_type"] != "continuous":
-                logger.warning(
-                    f"Action space is Box but action_type is {self._model_config_dict['action_type']}, setting to continuous."
-                )
-            self._model_config_dict["action_type"] = "continuous"
-        self._model_config_dict["action_indices"] = action_indices
+        # action_dim and action_indices must be set in config before catalog construction
+        action_dim = self._model_config_dict.get("action_dim")
+        action_indices = self._model_config_dict.get("action_indices")
+        if action_dim is None or action_indices is None:
+            raise ValueError(
+                "action_dim and action_indices must be set in model_config_dict before catalog construction."
+            )
         if self._actor_type in ("mlp", "stateActionDT"):
+            assert self.action_space.n == action_dim
             if self._model_config_dict["action_type"] == "discrete":
                 actor = ActorMLPModel(
                     config=self._model_config_dict,
