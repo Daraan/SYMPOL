@@ -44,6 +44,7 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
     """Use original SYMPOL implementation for PPO and batching"""
 
     render_env: bool = False
+    reduce_lr: bool = False
 
     if TYPE_CHECKING:  # cannot overwrite attribute
 
@@ -132,8 +133,28 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
     def _process_args_ray_utilities(self) -> None:
         """Make CLIArgs compatible with DefaultArgumentParser"""
         # self.iterations = int(self.total_steps / self.n_envs / self.minibatch_size)
-        self.env_type = self.env_id
-        self.agent_type = self.actor  # pyright: ignore[reportIncompatibleVariableOverride]
+        # Handle env_type <-> env_id mapping
+        # env_type is from DefaultArgumentParser, env_id is from SympolCLIArgs
+        if hasattr(self, "env_type") and hasattr(self, "env_id"):
+            # If env_type was set explicitly (e.g., from command line), use it for env_id
+            if "env_type" in getattr(self, "_explicit_args", set()):
+                self.env_id = self.env_type
+            # Always ensure env_type matches env_id for compatibility
+            self.env_type = self.env_id
+        elif hasattr(self, "env_id"):
+            self.env_type = self.env_id
+
+        # Handle agent_type <-> actor mapping
+        # agent_type is from DefaultArgumentParser, actor is from SympolCLIArgs
+        if hasattr(self, "agent_type") and hasattr(self, "actor"):
+            # If agent_type was set explicitly (e.g., from command line), use it for actor
+            if "agent_type" in getattr(self, "_explicit_args", set()):
+                self.actor = self.agent_type
+            # Always ensure agent_type matches actor for compatibility
+            self.agent_type = self.actor
+        elif hasattr(self, "actor"):
+            self.agent_type = self.actor
+
         self.render_mode = "rgb_array" if self.render_env else None
 
     def _process_args_sympol(self) -> None:
@@ -143,14 +164,25 @@ class SympolArgumentParser(ArgumentParserWithDefaults, DefaultArgumentParser, Sy
                 explicit_args_corrected.append("".join(some_arg.split("no-")))
             else:
                 explicit_args_corrected.append(some_arg)
-        # FIXME: When using args with "dest" these will not match the dest
+        # Map CLI argument names to their destination attributes
         dest_mapping = {}
         for action in self._actions:
             if isinstance(action, argparse._SubParsersAction):
                 continue
             if action.dest != action.option_strings[0].lstrip("-").replace("-", "_"):
                 dest_mapping[action.option_strings[0].lstrip("-").replace("-", "_")] = action.dest
-        explicit_arg_values = {arg: getattr(self, dest_mapping.get(arg, arg)) for arg in explicit_args_corrected}
+
+        # Handle argument mappings between DefaultArgumentParser and SympolCLIArgs
+        # Map env_type -> env_id (DefaultArgumentParser uses env_type, SympolCLIArgs uses env_id)
+        arg_mappings = {"env_type": "env_id", "agent_type": "actor"}
+
+        explicit_arg_values = {}
+        for arg in explicit_args_corrected:
+            # Convert hyphens to underscores for attribute lookup
+            arg_normalized = arg.replace("-", "_")
+            dest_arg = dest_mapping.get(arg_normalized, arg_normalized)
+            mapped_arg = arg_mappings.get(dest_arg, dest_arg)
+            explicit_arg_values[mapped_arg] = getattr(self, dest_arg)
 
         no_update = True
         if self.use_best_config:

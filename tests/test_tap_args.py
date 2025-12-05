@@ -6,6 +6,7 @@ from inspect import ismethod
 from typing import Any
 
 from frozendict import frozendict
+import pytest
 from tap import Tap
 
 from ray_utilities.callbacks.algorithm.dynamic_batch_size import DynamicGradientAccumulation
@@ -31,6 +32,9 @@ _default_args = SympolCLIArgs()
 # NOTE: In vars no_ attributes are removed; with asdict not!
 _default_args_dict = frozendict(vars(_default_args))
 _default_args_key_set = set(_default_args_dict.keys())
+
+
+patch_args = sympol_patch_args
 
 
 class TestArgObjects(unittest.TestCase):
@@ -511,6 +515,68 @@ class TestExtensionsAdded(SympolSetupDefaults):
             )
         # In symbol by using gradient accumulation - here we can only modify minibatch size
         # or decouple rollout and what is passed to the learner - however same attribute.
+
+    @pytest.mark.basic
+    def test_arg_dest(self):
+        with patch_args("--env_type", "Acrobot-v1"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+        self.assertEqual(args.env_type, args.env_id)
+        self.assertEqual(args.agent_type, args.actor)
+        self.assertEqual(args.render_mode, "rgb_array" if args.render_env else None)
+        self.assertEqual(args.env_type, "Acrobot-v1")
+
+    @pytest.mark.basic
+    def test_argument_mappings(self):
+        """Test various argument mappings between DefaultArgumentParser and SympolCLIArgs"""
+        # Test env_type -> env_id mapping
+        with patch_args("--env_type", "LunarLander-v2"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertEqual(args.env_id, "LunarLander-v2", "env_type should map to env_id")
+            self.assertEqual(args.env_type, args.env_id, "env_type should equal env_id after mapping")
+
+        # Test agent_type -> actor mapping
+        with patch_args("--agent_type", "mlp"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertEqual(args.actor, "mlp", "agent_type should map to actor")
+            self.assertEqual(args.agent_type, args.actor, "agent_type should equal actor after mapping")
+
+        # Test max_grad_norm -> grad_clip mapping
+        with patch_args("--max-grad-norm", "0.7"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertEqual(args.grad_clip, 0.7, "max_grad_norm should map to grad_clip")
+
+        # Test combined mappings
+        with patch_args("--env_type", "CartPole-v1", "--agent_type", "sdt", "--max-grad-norm", "1.0"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertEqual(args.env_id, "CartPole-v1")
+            self.assertEqual(args.env_type, "CartPole-v1")
+            self.assertEqual(args.actor, "sdt")
+            self.assertEqual(args.agent_type, "sdt")
+            self.assertEqual(args.grad_clip, 1.0)
+
+        # Assert that render_env is false per default
+        with patch_args():
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertFalse(args.render_env, "render_env should be False per default")
+
+        # Test render_mode generation
+        with patch_args("--render_env"):
+            parser = SympolArgumentParser()
+            args = parser.parse_args()
+            self.assertEqual(args.render_mode, "rgb_array", "render_mode should be 'rgb_array' when render_env is True")
+            self.assertTrue(args.render_env, "render_env should be True")
+
+        # Test without render_env (default should be False)
+        parser = SympolArgumentParser()
+        args = parser.parse_args()
+        self.assertIsNone(args.render_mode, "render_mode should be None when render_env is False (default)")
+        self.assertFalse(args.render_env, "render_env should be False by default")
 
 
 if __name__ == "__main__":
