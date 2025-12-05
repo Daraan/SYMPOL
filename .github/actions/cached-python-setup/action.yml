@@ -9,7 +9,7 @@ inputs:
   install-args:
     description: 'Arguments to pass to pip install'
     required: false
-    default: "'.' jax"
+    default: '.[mujoco]'
   use-pip-cache:
     description: 'Whether to use pip cache'
     required: false

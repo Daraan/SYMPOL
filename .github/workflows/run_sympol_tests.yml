@@ -26,11 +26,30 @@ jobs:
       with:
         python-version: '3.10'
         use-pip-cache: true
+    - name: Test Basic
+      run: |
+        source .venv/bin/activate
+        pytest -vx -k "not test_trainable_port and not test_tuner_integration and not test_pbt_port and not TestMetricsRestored"
+      env:
+        COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
+  test_metrics_restore:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+          persist-credentials: false
+    - name: Python setup and install
+      uses: ./.github/actions/cached-python-setup
+      with:
+        python-version: '3.10'
+        use-pip-cache: true
         install-args: '.'
     - name: Test Basic
       run: |
         source .venv/bin/activate
-        pytest -v -k "not test_trainable_port and not test_tuner_integration and not test_pbt_port"
+        pytest -v -k "TestMetricsRestored"
       env:
         COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
   test_integration2:
@@ -50,7 +69,7 @@ jobs:
     - name: Test Tuner and PBT integration
       run: |
         source .venv/bin/activate
-        pytest -v -k "test_tuner_integration or test_pbt_port"
+        pytest -vx -k "test_tuner_integration or test_pbt_port"
       env:
         COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
   test_integration_fast:

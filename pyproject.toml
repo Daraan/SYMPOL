@@ -31,7 +31,7 @@ dependencies = [
   "flax",
   "distrax",
   "optax",
-  "gymnasium",
+  "gymnasium[mujoco]",
   "optuna",
   "ray!=2.47.*",
   "ray_utilities[jax,test] @ git+https://github.com/Daraan/ray_utilities",
